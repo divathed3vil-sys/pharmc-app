@@ -1,0 +1,134 @@
+import 'package:flutter/material.dart';
+import '../constants.dart';
+import 'login_screen.dart';
+
+class SplashScreen extends StatefulWidget {
+  const SplashScreen({super.key});
+
+  @override
+  State<SplashScreen> createState() => _SplashScreenState();
+}
+
+class _SplashScreenState extends State<SplashScreen>
+    with SingleTickerProviderStateMixin {
+  late AnimationController _controller;
+  late Animation<double> _fadeIn;
+  late Animation<double> _scale;
+
+  bool _exiting = false;
+
+  @override
+  void initState() {
+    super.initState();
+
+    _controller = AnimationController(
+      vsync: this,
+      duration: const Duration(milliseconds: 1200),
+    );
+
+    _fadeIn = Tween<double>(
+      begin: 0.0,
+      end: 1.0,
+    ).animate(CurvedAnimation(parent: _controller, curve: Curves.easeOut));
+
+    _scale = Tween<double>(
+      begin: 0.85,
+      end: 1.0,
+    ).animate(CurvedAnimation(parent: _controller, curve: Curves.easeOutCubic));
+
+    _startSequence();
+  }
+
+  void _startSequence() async {
+    // Small pause before animation starts
+    await Future.delayed(const Duration(milliseconds: 400));
+
+    // Fade in + scale up
+    _controller.forward();
+
+    // Hold the logo
+    await Future.delayed(const Duration(milliseconds: 2800));
+
+    // Trigger exit
+    if (mounted) {
+      setState(() {
+        _exiting = true;
+      });
+
+      // Wait for exit animation
+      await Future.delayed(const Duration(milliseconds: 500));
+
+      // Navigate
+      if (mounted) {
+        Navigator.pushReplacement(
+          context,
+          PageRouteBuilder(
+            pageBuilder: (context, animation, secondaryAnimation) =>
+                const LoginScreen(),
+            transitionDuration: const Duration(milliseconds: 600),
+            transitionsBuilder:
+                (context, animation, secondaryAnimation, child) {
+                  return FadeTransition(opacity: animation, child: child);
+                },
+          ),
+        );
+      }
+    }
+  }
+
+  @override
+  void dispose() {
+    _controller.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      backgroundColor: Colors.white,
+      body: Center(
+        child: AnimatedOpacity(
+          duration: const Duration(milliseconds: 500),
+          opacity: _exiting ? 0.0 : 1.0,
+          child: AnimatedSlide(
+            duration: const Duration(milliseconds: 500),
+            offset: _exiting ? const Offset(0, -0.05) : Offset.zero,
+            curve: Curves.easeInCubic,
+            child: ScaleTransition(
+              scale: _scale,
+              child: FadeTransition(
+                opacity: _fadeIn,
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    // Logo text — reads from constants
+                    Text(
+                      AppConstants.appName,
+                      style: TextStyle(
+                        fontSize: 52,
+                        fontWeight: FontWeight.w800,
+                        color: Colors.teal.shade700,
+                        letterSpacing: -2.0,
+                      ),
+                    ),
+                    const SizedBox(height: 10),
+                    // Tagline
+                    Text(
+                      'Medicine, delivered.',
+                      style: TextStyle(
+                        fontSize: 16,
+                        fontWeight: FontWeight.w400,
+                        color: Colors.grey.shade400,
+                        letterSpacing: 0.5,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+}
