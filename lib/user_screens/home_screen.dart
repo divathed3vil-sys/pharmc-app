@@ -1,12 +1,19 @@
 import 'package:flutter/material.dart';
+import '../services/preferences_service.dart';
 import 'upload_prescription_screen.dart';
 import 'orders_screen.dart';
+import 'profile/profile_screen.dart';
 
 class HomeScreen extends StatelessWidget {
   const HomeScreen({super.key});
 
   @override
   Widget build(BuildContext context) {
+    final String userName = PreferencesService.getUserName() ?? 'User';
+    final String initial = userName.isNotEmpty
+        ? userName[0].toUpperCase()
+        : 'U';
+
     return Scaffold(
       backgroundColor: Colors.white,
       body: SafeArea(
@@ -25,7 +32,7 @@ class HomeScreen extends StatelessWidget {
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
                       Text(
-                        'Hello 👋',
+                        'Hello $userName 👋',
                         style: TextStyle(
                           fontSize: 16,
                           color: Colors.grey.shade500,
@@ -43,17 +50,32 @@ class HomeScreen extends StatelessWidget {
                     ],
                   ),
                   // Profile avatar
-                  Container(
-                    width: 44,
-                    height: 44,
-                    decoration: BoxDecoration(
-                      color: Colors.teal.shade50,
-                      borderRadius: BorderRadius.circular(14),
-                    ),
-                    child: Icon(
-                      Icons.person_outline_rounded,
-                      color: Colors.teal.shade700,
-                      size: 22,
+                  GestureDetector(
+                    onTap: () {
+                      Navigator.push(
+                        context,
+                        MaterialPageRoute(
+                          builder: (_) => const ProfileScreen(),
+                        ),
+                      );
+                    },
+                    child: Container(
+                      width: 44,
+                      height: 44,
+                      decoration: BoxDecoration(
+                        color: Colors.teal.shade50,
+                        borderRadius: BorderRadius.circular(14),
+                      ),
+                      child: Center(
+                        child: Text(
+                          initial,
+                          style: TextStyle(
+                            fontSize: 18,
+                            fontWeight: FontWeight.w700,
+                            color: Colors.teal.shade700,
+                          ),
+                        ),
+                      ),
                     ),
                   ),
                 ],
@@ -92,7 +114,6 @@ class HomeScreen extends StatelessWidget {
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      // Icon
                       Container(
                         width: 52,
                         height: 52,
@@ -125,7 +146,6 @@ class HomeScreen extends StatelessWidget {
                         ),
                       ),
                       const SizedBox(height: 16),
-                      // Arrow indicator
                       Row(
                         children: [
                           Text(
@@ -194,7 +214,6 @@ class HomeScreen extends StatelessWidget {
   }
 
   Widget _buildRecentOrders(BuildContext context) {
-    // Fake data — will be replaced with Supabase later
     final orders = [
       {
         'id': '#ORD-001',
@@ -268,7 +287,6 @@ class HomeScreen extends StatelessWidget {
           ),
           child: Row(
             children: [
-              // Status icon
               Container(
                 width: 44,
                 height: 44,
@@ -283,8 +301,6 @@ class HomeScreen extends StatelessWidget {
                 ),
               ),
               const SizedBox(width: 14),
-
-              // Order details
               Expanded(
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
@@ -308,8 +324,6 @@ class HomeScreen extends StatelessWidget {
                   ],
                 ),
               ),
-
-              // Price and status
               Column(
                 crossAxisAlignment: CrossAxisAlignment.end,
                 children: [

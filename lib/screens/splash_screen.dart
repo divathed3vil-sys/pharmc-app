@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
 import '../constants.dart';
-import 'login_screen.dart';
+import '../services/preferences_service.dart';
+import 'role_selection_screen.dart';
+import '../user_screens/home_screen.dart';
 
 class SplashScreen extends StatefulWidget {
   const SplashScreen({super.key});
@@ -40,31 +42,35 @@ class _SplashScreenState extends State<SplashScreen>
   }
 
   void _startSequence() async {
-    // Small pause before animation starts
     await Future.delayed(const Duration(milliseconds: 400));
 
-    // Fade in + scale up
     _controller.forward();
 
-    // Hold the logo
     await Future.delayed(const Duration(milliseconds: 2800));
 
-    // Trigger exit
     if (mounted) {
       setState(() {
         _exiting = true;
       });
 
-      // Wait for exit animation
       await Future.delayed(const Duration(milliseconds: 500));
 
-      // Navigate
       if (mounted) {
+        // Decide where to go
+        final bool registered = PreferencesService.isRegistered();
+
+        Widget destination;
+        if (registered) {
+          destination = const HomeScreen();
+        } else {
+          destination = const RoleSelectionScreen();
+        }
+
         Navigator.pushReplacement(
           context,
           PageRouteBuilder(
             pageBuilder: (context, animation, secondaryAnimation) =>
-                const LoginScreen(),
+                destination,
             transitionDuration: const Duration(milliseconds: 600),
             transitionsBuilder:
                 (context, animation, secondaryAnimation, child) {
@@ -101,7 +107,6 @@ class _SplashScreenState extends State<SplashScreen>
                 child: Column(
                   mainAxisSize: MainAxisSize.min,
                   children: [
-                    // Logo text — reads from constants
                     Text(
                       AppConstants.appName,
                       style: TextStyle(
@@ -112,7 +117,6 @@ class _SplashScreenState extends State<SplashScreen>
                       ),
                     ),
                     const SizedBox(height: 10),
-                    // Tagline
                     Text(
                       'Medicine, delivered.',
                       style: TextStyle(

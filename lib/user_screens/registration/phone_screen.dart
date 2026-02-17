@@ -1,27 +1,24 @@
 import 'package:flutter/material.dart';
-import 'home_screen.dart';
-import '../constants.dart';
+import '../../constants.dart';
+import '../../services/preferences_service.dart';
+import 'email_password_screen.dart';
 
-class LoginScreen extends StatefulWidget {
-  const LoginScreen({super.key});
+class PhoneScreen extends StatefulWidget {
+  const PhoneScreen({super.key});
 
   @override
-  State<LoginScreen> createState() => _LoginScreenState();
+  State<PhoneScreen> createState() => _PhoneScreenState();
 }
 
-class _LoginScreenState extends State<LoginScreen> {
+class _PhoneScreenState extends State<PhoneScreen> {
   final TextEditingController _phoneController = TextEditingController();
-  bool _isButtonEnabled = false;
+
+  bool get _canContinue => _phoneController.text.trim().length == 9;
 
   @override
   void initState() {
     super.initState();
-    _phoneController.addListener(() {
-      setState(() {
-        // Sri Lankan phone numbers: 10 digits (7XXXXXXXX)
-        _isButtonEnabled = _phoneController.text.trim().length == 9;
-      });
-    });
+    _phoneController.addListener(() => setState(() {}));
   }
 
   @override
@@ -30,61 +27,83 @@ class _LoginScreenState extends State<LoginScreen> {
     super.dispose();
   }
 
-  void _handleContinue() {
-    // Later this will send OTP via Supabase
-    // For now just navigate to Home
-    Navigator.pushReplacement(
-      context,
-      MaterialPageRoute(builder: (_) => const HomeScreen()),
-    );
+  void _continue() async {
+    await PreferencesService.setUserPhone(_phoneController.text.trim());
+
+    if (mounted) {
+      Navigator.push(
+        context,
+        MaterialPageRoute(builder: (_) => const EmailPasswordScreen()),
+      );
+    }
   }
 
   @override
   Widget build(BuildContext context) {
     return Scaffold(
       backgroundColor: Colors.white,
+      appBar: AppBar(
+        backgroundColor: Colors.white,
+        elevation: 0,
+        leading: GestureDetector(
+          onTap: () => Navigator.pop(context),
+          child: Container(
+            margin: const EdgeInsets.all(8),
+            decoration: BoxDecoration(
+              color: const Color(0xFFF5F5F5),
+              borderRadius: BorderRadius.circular(12),
+            ),
+            child: const Icon(
+              Icons.arrow_back_rounded,
+              color: Color(0xFF1A1A1A),
+              size: 20,
+            ),
+          ),
+        ),
+      ),
       body: SafeArea(
         child: Padding(
           padding: const EdgeInsets.symmetric(horizontal: 28.0),
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              const SizedBox(height: 60),
+              const SizedBox(height: 8),
 
-              // App logo — reads from constants
-              Text(
-                AppConstants.appName,
-                style: TextStyle(
-                  fontSize: 28,
-                  fontWeight: FontWeight.w800,
-                  color: Colors.teal.shade700,
-                  letterSpacing: -1.0,
-                ),
-              ),
+              _buildProgress(2, 3),
 
               const SizedBox(height: 32),
 
-              // Main heading
-              const Text(
-                'Get your\nmedicine delivered.',
+              Text(
+                AppConstants.appName,
                 style: TextStyle(
-                  fontSize: 30,
+                  fontSize: 20,
+                  fontWeight: FontWeight.w800,
+                  color: Colors.teal.shade700,
+                  letterSpacing: -0.5,
+                ),
+              ),
+
+              const SizedBox(height: 24),
+
+              const Text(
+                'Your phone number',
+                style: TextStyle(
+                  fontSize: 26,
                   fontWeight: FontWeight.w700,
-                  height: 1.2,
                   color: Color(0xFF1A1A1A),
                 ),
               ),
 
-              const SizedBox(height: 12),
+              const SizedBox(height: 8),
 
               Text(
-                'Enter your phone number to continue.',
-                style: TextStyle(fontSize: 16, color: Colors.grey.shade500),
+                "We'll use this to contact you about your orders.",
+                style: TextStyle(fontSize: 15, color: Colors.grey.shade500),
               ),
 
-              const SizedBox(height: 40),
+              const SizedBox(height: 32),
 
-              // Phone number input
+              // Phone input
               Container(
                 decoration: BoxDecoration(
                   color: const Color(0xFFF5F5F5),
@@ -129,14 +148,13 @@ class _LoginScreenState extends State<LoginScreen> {
                 ),
               ),
 
-              const SizedBox(height: 24),
+              const Spacer(),
 
-              // Continue button
               SizedBox(
                 width: double.infinity,
                 height: 56,
                 child: ElevatedButton(
-                  onPressed: _isButtonEnabled ? _handleContinue : null,
+                  onPressed: _canContinue ? _continue : null,
                   style: ElevatedButton.styleFrom(
                     backgroundColor: Colors.teal.shade600,
                     disabledBackgroundColor: Colors.teal.shade100,
@@ -154,26 +172,32 @@ class _LoginScreenState extends State<LoginScreen> {
                 ),
               ),
 
-              const SizedBox(height: 16),
-
-              // Terms text
-              Center(
-                child: Text(
-                  'By continuing, you agree to our Terms of Service\nand Privacy Policy.',
-                  textAlign: TextAlign.center,
-                  style: TextStyle(
-                    fontSize: 12,
-                    color: Colors.grey.shade400,
-                    height: 1.5,
-                  ),
-                ),
-              ),
-
-              const Spacer(),
+              const SizedBox(height: 32),
             ],
           ),
         ),
       ),
+    );
+  }
+
+  Widget _buildProgress(int current, int total) {
+    return Row(
+      children: List.generate(total, (index) {
+        final isActive = index < current;
+        final isCurrent = index == current - 1;
+        return Expanded(
+          child: Container(
+            height: 4,
+            margin: EdgeInsets.only(right: index < total - 1 ? 8 : 0),
+            decoration: BoxDecoration(
+              color: isActive
+                  ? (isCurrent ? Colors.teal.shade600 : Colors.teal.shade200)
+                  : Colors.grey.shade200,
+              borderRadius: BorderRadius.circular(2),
+            ),
+          ),
+        );
+      }),
     );
   }
 }
