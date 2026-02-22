@@ -1,25 +1,67 @@
 import 'package:flutter/material.dart';
+import 'package:supabase_flutter/supabase_flutter.dart';
 import 'screens/splash_screen.dart';
 import 'services/preferences_service.dart';
+import 'services/theme_service.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
+
+  // Initialize Supabase
+  await Supabase.initialize(
+    url: 'https://nlfncfkxznblqmxblwpa.supabase.co',
+    anonKey:
+        'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Im5sZm5jZmt4em5ibHFteGJsd3BhIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzE1OTU0MTQsImV4cCI6MjA4NzE3MTQxNH0.GSeThrDc0Z8-6PiqHOzXPulFS2HZxvRNTYjMaLAIyK4',
+  );
+
+  // Initialize SharedPreferences
   await PreferencesService.init();
+
   runApp(const MyApp());
 }
 
-class MyApp extends StatelessWidget {
+// Global Supabase client - use this anywhere in the app
+final supabase = Supabase.instance.client;
+
+class MyApp extends StatefulWidget {
   const MyApp({super.key});
+
+  static void refresh(BuildContext context) {
+    final state = context.findAncestorStateOfType<_MyAppState>();
+    state?.refresh();
+  }
+
+  @override
+  State<MyApp> createState() => _MyAppState();
+}
+
+class _MyAppState extends State<MyApp> {
+  final ThemeService _themeService = ThemeService();
+
+  void refresh() {
+    setState(() {
+      _themeService.reload();
+    });
+  }
 
   @override
   Widget build(BuildContext context) {
+    final double scaleFactor = _themeService.scaleFactor;
+
     return MaterialApp(
       title: 'PharmC',
       debugShowCheckedModeBanner: false,
-      theme: ThemeData(
-        colorScheme: ColorScheme.fromSeed(seedColor: Colors.teal),
-        useMaterial3: true,
-      ),
+      theme: _themeService.lightTheme,
+      darkTheme: _themeService.darkTheme,
+      themeMode: _themeService.themeMode,
+      builder: (context, child) {
+        return MediaQuery(
+          data: MediaQuery.of(
+            context,
+          ).copyWith(textScaler: TextScaler.linear(scaleFactor)),
+          child: child!,
+        );
+      },
       home: const SplashScreen(),
     );
   }

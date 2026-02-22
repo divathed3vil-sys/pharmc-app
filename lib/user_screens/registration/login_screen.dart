@@ -1,25 +1,24 @@
 import 'package:flutter/material.dart';
 import '../../constants.dart';
-import '../../services/preferences_service.dart';
 import '../../services/auth_service.dart';
-import 'login_screen.dart';
+import '../home_screen.dart';
 import 'email_verification_screen.dart';
 
-class EmailPasswordScreen extends StatefulWidget {
-  const EmailPasswordScreen({super.key});
+class LoginScreen extends StatefulWidget {
+  const LoginScreen({super.key});
 
   @override
-  State<EmailPasswordScreen> createState() => _EmailPasswordScreenState();
+  State<LoginScreen> createState() => _LoginScreenState();
 }
 
-class _EmailPasswordScreenState extends State<EmailPasswordScreen> {
+class _LoginScreenState extends State<LoginScreen> {
   final TextEditingController _emailController = TextEditingController();
   final TextEditingController _passwordController = TextEditingController();
   bool _obscurePassword = true;
   bool _isLoading = false;
   String? _errorMessage;
 
-  bool get _canContinue =>
+  bool get _canLogin =>
       _emailController.text.trim().contains('@') &&
       _emailController.text.trim().contains('.') &&
       _passwordController.text.length >= 6 &&
@@ -47,27 +46,15 @@ class _EmailPasswordScreenState extends State<EmailPasswordScreen> {
     super.dispose();
   }
 
-  void _signUp() async {
+  void _login() async {
     setState(() {
       _isLoading = true;
       _errorMessage = null;
     });
 
-    // Get cached registration data
-    final name = PreferencesService.getUserName() ?? '';
-    final age = PreferencesService.getUserAge() ?? 0;
-    final phone = PreferencesService.getUserPhone() ?? '';
-    final role = PreferencesService.getUserRole() ?? 'customer';
-    final email = _emailController.text.trim();
-    final password = _passwordController.text;
-
-    final result = await AuthService.signUp(
-      email: email,
-      password: password,
-      fullName: name,
-      age: age,
-      phone: phone,
-      role: role,
+    final result = await AuthService.signIn(
+      email: _emailController.text.trim(),
+      password: _passwordController.text,
     );
 
     if (!mounted) return;
@@ -77,14 +64,19 @@ class _EmailPasswordScreenState extends State<EmailPasswordScreen> {
     });
 
     if (result.success) {
-      // Save email locally
-      await PreferencesService.setUserEmail(email);
-
+      // Go to home
+      Navigator.pushAndRemoveUntil(
+        context,
+        MaterialPageRoute(builder: (_) => const HomeScreen()),
+        (route) => false,
+      );
+    } else if (result.needsVerification) {
       // Go to verification screen
       Navigator.push(
         context,
         MaterialPageRoute(
-          builder: (_) => EmailVerificationScreen(email: email),
+          builder: (_) =>
+              EmailVerificationScreen(email: _emailController.text.trim()),
         ),
       );
     } else {
@@ -92,6 +84,41 @@ class _EmailPasswordScreenState extends State<EmailPasswordScreen> {
         _errorMessage = result.message;
       });
     }
+  }
+
+  void _forgotPassword() async {
+    final email = _emailController.text.trim();
+
+    if (!email.contains('@') || !email.contains('.')) {
+      setState(() {
+        _errorMessage = 'Enter your email above, then tap Forgot Password.';
+      });
+      return;
+    }
+
+    setState(() {
+      _isLoading = true;
+      _errorMessage = null;
+    });
+
+    final result = await AuthService.resetPassword(email);
+
+    if (!mounted) return;
+
+    setState(() {
+      _isLoading = false;
+    });
+
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text(result.message),
+        backgroundColor: result.success
+            ? Colors.teal.shade600
+            : Colors.red.shade400,
+        behavior: SnackBarBehavior.floating,
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+      ),
+    );
   }
 
   @override
@@ -135,8 +162,6 @@ class _EmailPasswordScreenState extends State<EmailPasswordScreen> {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              const SizedBox(height: 8),
-              _buildProgress(3, 3, isDark),
               const SizedBox(height: 32),
               Text(
                 AppConstants.appName,
@@ -149,7 +174,7 @@ class _EmailPasswordScreenState extends State<EmailPasswordScreen> {
               ),
               const SizedBox(height: 24),
               Text(
-                'Create your account',
+                'Welcome back',
                 style: TextStyle(
                   fontSize: 26,
                   fontWeight: FontWeight.w700,
@@ -158,7 +183,7 @@ class _EmailPasswordScreenState extends State<EmailPasswordScreen> {
               ),
               const SizedBox(height: 8),
               Text(
-                "You'll use this to log in.",
+                'Log in to your account.',
                 style: TextStyle(fontSize: 15, color: subtextColor),
               ),
               const SizedBox(height: 32),
@@ -215,7 +240,7 @@ class _EmailPasswordScreenState extends State<EmailPasswordScreen> {
                     color: textColor,
                   ),
                   decoration: InputDecoration(
-                    hintText: 'Password (min 6 characters)',
+                    hintText: 'Password',
                     hintStyle: TextStyle(
                       color: hintColor,
                       fontWeight: FontWeight.w400,
@@ -243,6 +268,23 @@ class _EmailPasswordScreenState extends State<EmailPasswordScreen> {
                     contentPadding: const EdgeInsets.symmetric(
                       horizontal: 16,
                       vertical: 18,
+                    ),
+                  ),
+                ),
+              ),
+
+              // Forgot password
+              const SizedBox(height: 12),
+              Align(
+                alignment: Alignment.centerRight,
+                child: GestureDetector(
+                  onTap: _isLoading ? null : _forgotPassword,
+                  child: Text(
+                    'Forgot password?',
+                    style: TextStyle(
+                      fontSize: 14,
+                      fontWeight: FontWeight.w600,
+                      color: Colors.teal.shade600,
                     ),
                   ),
                 ),
@@ -290,12 +332,12 @@ class _EmailPasswordScreenState extends State<EmailPasswordScreen> {
 
               const Spacer(),
 
-              // Sign up button
+              // Login button
               SizedBox(
                 width: double.infinity,
                 height: 56,
                 child: ElevatedButton(
-                  onPressed: _canContinue ? _signUp : null,
+                  onPressed: _canLogin ? _login : null,
                   style: ElevatedButton.styleFrom(
                     backgroundColor: Colors.teal.shade600,
                     disabledBackgroundColor: isDark
@@ -318,7 +360,7 @@ class _EmailPasswordScreenState extends State<EmailPasswordScreen> {
                           ),
                         )
                       : const Text(
-                          'Create Account',
+                          'Log In',
                           style: TextStyle(
                             fontSize: 17,
                             fontWeight: FontWeight.w600,
@@ -326,65 +368,11 @@ class _EmailPasswordScreenState extends State<EmailPasswordScreen> {
                         ),
                 ),
               ),
-
-              // Login link
-              const SizedBox(height: 16),
-              Center(
-                child: GestureDetector(
-                  onTap: _isLoading
-                      ? null
-                      : () {
-                          Navigator.push(
-                            context,
-                            MaterialPageRoute(
-                              builder: (_) => const LoginScreen(),
-                            ),
-                          );
-                        },
-                  child: RichText(
-                    text: TextSpan(
-                      text: 'Already have an account? ',
-                      style: TextStyle(fontSize: 14, color: subtextColor),
-                      children: [
-                        TextSpan(
-                          text: 'Log in',
-                          style: TextStyle(
-                            fontSize: 14,
-                            fontWeight: FontWeight.w700,
-                            color: Colors.teal.shade600,
-                          ),
-                        ),
-                      ],
-                    ),
-                  ),
-                ),
-              ),
               const SizedBox(height: 32),
             ],
           ),
         ),
       ),
-    );
-  }
-
-  Widget _buildProgress(int current, int total, bool isDark) {
-    return Row(
-      children: List.generate(total, (index) {
-        final isActive = index < current;
-        final isCurrent = index == current - 1;
-        return Expanded(
-          child: Container(
-            height: 4,
-            margin: EdgeInsets.only(right: index < total - 1 ? 8 : 0),
-            decoration: BoxDecoration(
-              color: isActive
-                  ? (isCurrent ? Colors.teal.shade600 : Colors.teal.shade200)
-                  : (isDark ? Colors.grey.shade800 : Colors.grey.shade200),
-              borderRadius: BorderRadius.circular(2),
-            ),
-          ),
-        );
-      }),
     );
   }
 }

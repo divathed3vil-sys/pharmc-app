@@ -11,7 +11,6 @@ class _OrdersScreenState extends State<OrdersScreen>
     with SingleTickerProviderStateMixin {
   late TabController _tabController;
 
-  // Fake data — will come from Supabase later
   final List<Map<String, dynamic>> _activeOrders = [
     {
       'id': '#ORD-003',
@@ -98,32 +97,35 @@ class _OrdersScreenState extends State<OrdersScreen>
 
   @override
   Widget build(BuildContext context) {
+    final bool isDark = Theme.of(context).brightness == Brightness.dark;
+    final Color textColor = isDark ? Colors.white : const Color(0xFF1A1A1A);
+    final Color backBg = isDark
+        ? const Color(0xFF2A2A2A)
+        : const Color(0xFFF5F5F5);
+    final Color tabBg = isDark
+        ? const Color(0xFF1E1E1E)
+        : const Color(0xFFF5F5F5);
+
     return Scaffold(
-      backgroundColor: Colors.white,
+      backgroundColor: Theme.of(context).scaffoldBackgroundColor,
       appBar: AppBar(
-        backgroundColor: Colors.white,
-        elevation: 0,
         leading: GestureDetector(
           onTap: () => Navigator.pop(context),
           child: Container(
             margin: const EdgeInsets.all(8),
             decoration: BoxDecoration(
-              color: const Color(0xFFF5F5F5),
+              color: backBg,
               borderRadius: BorderRadius.circular(12),
             ),
-            child: const Icon(
-              Icons.arrow_back_rounded,
-              color: Color(0xFF1A1A1A),
-              size: 20,
-            ),
+            child: Icon(Icons.arrow_back_rounded, color: textColor, size: 20),
           ),
         ),
-        title: const Text(
+        title: Text(
           'My Orders',
           style: TextStyle(
             fontSize: 18,
             fontWeight: FontWeight.w600,
-            color: Color(0xFF1A1A1A),
+            color: textColor,
           ),
         ),
         centerTitle: true,
@@ -132,7 +134,7 @@ class _OrdersScreenState extends State<OrdersScreen>
           child: Container(
             margin: const EdgeInsets.symmetric(horizontal: 24),
             decoration: BoxDecoration(
-              color: const Color(0xFFF5F5F5),
+              color: tabBg,
               borderRadius: BorderRadius.circular(12),
             ),
             child: TabBar(
@@ -143,7 +145,9 @@ class _OrdersScreenState extends State<OrdersScreen>
               ),
               indicatorSize: TabBarIndicatorSize.tab,
               labelColor: Colors.white,
-              unselectedLabelColor: Colors.grey.shade500,
+              unselectedLabelColor: isDark
+                  ? Colors.grey.shade400
+                  : Colors.grey.shade500,
               labelStyle: const TextStyle(
                 fontSize: 14,
                 fontWeight: FontWeight.w600,
@@ -192,76 +196,84 @@ class _OrdersScreenState extends State<OrdersScreen>
       body: TabBarView(
         controller: _tabController,
         children: [
-          // Active orders tab
-          _buildActiveTab(),
-          // History tab
-          _buildHistoryTab(),
+          _buildActiveTab(isDark, textColor),
+          _buildHistoryTab(isDark, textColor),
         ],
       ),
     );
   }
 
-  // Active orders tab
-  Widget _buildActiveTab() {
+  Widget _buildActiveTab(bool isDark, Color textColor) {
     if (_activeOrders.isEmpty) {
       return _buildEmptyState(
         icon: Icons.local_shipping_outlined,
         title: 'No active orders',
         subtitle: 'Your current orders will appear here',
+        isDark: isDark,
       );
     }
-
     return ListView.separated(
       physics: const BouncingScrollPhysics(),
       padding: const EdgeInsets.all(24),
       itemCount: _activeOrders.length,
-      separatorBuilder: (_, _) => const SizedBox(height: 16),
+      separatorBuilder: (_, __) => const SizedBox(height: 16),
       itemBuilder: (context, index) {
         final order = _activeOrders[index];
-        return _buildActiveOrderCard(order);
+        return _buildActiveOrderCard(order, isDark, textColor);
       },
     );
   }
 
-  // History tab
-  Widget _buildHistoryTab() {
+  Widget _buildHistoryTab(bool isDark, Color textColor) {
     if (_pastOrders.isEmpty) {
       return _buildEmptyState(
         icon: Icons.receipt_long_outlined,
         title: 'No order history',
         subtitle: 'Your completed orders will appear here',
+        isDark: isDark,
       );
     }
-
     return ListView.separated(
       physics: const BouncingScrollPhysics(),
       padding: const EdgeInsets.all(24),
       itemCount: _pastOrders.length,
-      separatorBuilder: (_, _) => const SizedBox(height: 12),
+      separatorBuilder: (_, __) => const SizedBox(height: 12),
       itemBuilder: (context, index) {
         final order = _pastOrders[index];
-        return _buildHistoryOrderCard(order);
+        return _buildHistoryOrderCard(order, isDark, textColor);
       },
     );
   }
 
-  // Active order card with progress tracker
-  Widget _buildActiveOrderCard(Map<String, dynamic> order) {
+  Widget _buildActiveOrderCard(
+    Map<String, dynamic> order,
+    bool isDark,
+    Color textColor,
+  ) {
     final steps = order['steps'] as List<Map<String, dynamic>>;
+    final Color cardColor = isDark ? const Color(0xFF1E1E1E) : Colors.white;
+    final Color innerCardColor = isDark
+        ? const Color(0xFF2A2A2A)
+        : const Color(0xFFF8F9FA);
 
     return Container(
       padding: const EdgeInsets.all(20),
       decoration: BoxDecoration(
-        color: Colors.white,
+        color: cardColor,
         borderRadius: BorderRadius.circular(18),
-        border: Border.all(color: Colors.grey.shade200, width: 1),
-        boxShadow: [
-          BoxShadow(
-            color: Colors.black.withOpacity(0.04),
-            blurRadius: 12,
-            offset: const Offset(0, 4),
-          ),
-        ],
+        border: Border.all(
+          color: isDark ? Colors.grey.shade800 : Colors.grey.shade200,
+          width: 1,
+        ),
+        boxShadow: isDark
+            ? []
+            : [
+                BoxShadow(
+                  color: Colors.black.withOpacity(0.04),
+                  blurRadius: 12,
+                  offset: const Offset(0, 4),
+                ),
+              ],
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -275,16 +287,21 @@ class _OrdersScreenState extends State<OrdersScreen>
                 children: [
                   Text(
                     order['id'] as String,
-                    style: const TextStyle(
+                    style: TextStyle(
                       fontSize: 16,
                       fontWeight: FontWeight.w700,
-                      color: Color(0xFF1A1A1A),
+                      color: textColor,
                     ),
                   ),
                   const SizedBox(height: 2),
                   Text(
                     order['date'] as String,
-                    style: TextStyle(fontSize: 13, color: Colors.grey.shade500),
+                    style: TextStyle(
+                      fontSize: 13,
+                      color: isDark
+                          ? Colors.grey.shade400
+                          : Colors.grey.shade500,
+                    ),
                   ),
                 ],
               ),
@@ -319,15 +336,13 @@ class _OrdersScreenState extends State<OrdersScreen>
               ),
             ],
           ),
-
           const SizedBox(height: 16),
-
-          // Pharmacy and prescription info
+          // Pharmacy info
           Container(
             width: double.infinity,
             padding: const EdgeInsets.all(14),
             decoration: BoxDecoration(
-              color: const Color(0xFFF8F9FA),
+              color: innerCardColor,
               borderRadius: BorderRadius.circular(12),
             ),
             child: Row(
@@ -343,38 +358,36 @@ class _OrdersScreenState extends State<OrdersScreen>
                 Expanded(
                   child: Text(
                     order['pharmacy'] as String,
-                    style: const TextStyle(
+                    style: TextStyle(
                       fontSize: 14,
                       fontWeight: FontWeight.w600,
-                      color: Color(0xFF1A1A1A),
+                      color: textColor,
                     ),
                   ),
                 ),
                 Text(
                   '${order['prescriptions']} prescription(s)',
-                  style: TextStyle(fontSize: 12, color: Colors.grey.shade500),
+                  style: TextStyle(
+                    fontSize: 12,
+                    color: isDark ? Colors.grey.shade400 : Colors.grey.shade500,
+                  ),
                 ),
               ],
             ),
           ),
-
           const SizedBox(height: 16),
-
           // Progress stepper
           ...steps.asMap().entries.map((entry) {
             final stepIndex = entry.key;
             final step = entry.value;
             final isDone = step['done'] as bool;
             final isLast = stepIndex == steps.length - 1;
-
-            // Find the current active step
             final isCurrentStep =
                 isDone && (isLast || !(steps[stepIndex + 1]['done'] as bool));
 
             return Row(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                // Step indicator column
                 Column(
                   children: [
                     Container(
@@ -385,7 +398,9 @@ class _OrdersScreenState extends State<OrdersScreen>
                             ? (isCurrentStep
                                   ? Colors.teal.shade600
                                   : Colors.teal.shade100)
-                            : Colors.grey.shade200,
+                            : (isDark
+                                  ? Colors.grey.shade800
+                                  : Colors.grey.shade200),
                         shape: BoxShape.circle,
                       ),
                       child: isDone
@@ -406,12 +421,13 @@ class _OrdersScreenState extends State<OrdersScreen>
                         height: 24,
                         color: isDone
                             ? Colors.teal.shade200
-                            : Colors.grey.shade200,
+                            : (isDark
+                                  ? Colors.grey.shade800
+                                  : Colors.grey.shade200),
                       ),
                   ],
                 ),
                 const SizedBox(width: 12),
-                // Step label
                 Padding(
                   padding: const EdgeInsets.only(top: 2),
                   child: Text(
@@ -422,26 +438,27 @@ class _OrdersScreenState extends State<OrdersScreen>
                           ? FontWeight.w700
                           : FontWeight.w400,
                       color: isDone
-                          ? (isCurrentStep
-                                ? Colors.teal.shade800
-                                : const Color(0xFF1A1A1A))
-                          : Colors.grey.shade400,
+                          ? (isCurrentStep ? Colors.teal.shade800 : textColor)
+                          : (isDark
+                                ? Colors.grey.shade600
+                                : Colors.grey.shade400),
                     ),
                   ),
                 ),
               ],
             );
           }),
-
           const SizedBox(height: 16),
-
           // Price row
           Row(
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
               Text(
                 'Total',
-                style: TextStyle(fontSize: 14, color: Colors.grey.shade500),
+                style: TextStyle(
+                  fontSize: 14,
+                  color: isDark ? Colors.grey.shade400 : Colors.grey.shade500,
+                ),
               ),
               Text(
                 order['total'] as String,
@@ -450,7 +467,7 @@ class _OrdersScreenState extends State<OrdersScreen>
                   fontWeight: FontWeight.w700,
                   color: order['total'] == 'Pending'
                       ? Colors.orange.shade600
-                      : const Color(0xFF1A1A1A),
+                      : textColor,
                 ),
               ),
             ],
@@ -460,17 +477,23 @@ class _OrdersScreenState extends State<OrdersScreen>
     );
   }
 
-  // History order card (simpler, no progress tracker)
-  Widget _buildHistoryOrderCard(Map<String, dynamic> order) {
+  Widget _buildHistoryOrderCard(
+    Map<String, dynamic> order,
+    bool isDark,
+    Color textColor,
+  ) {
+    final Color cardColor = isDark
+        ? const Color(0xFF1E1E1E)
+        : const Color(0xFFF8F9FA);
+
     return Container(
       padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
-        color: const Color(0xFFF8F9FA),
+        color: cardColor,
         borderRadius: BorderRadius.circular(16),
       ),
       child: Row(
         children: [
-          // Status icon
           Container(
             width: 48,
             height: 48,
@@ -485,44 +508,46 @@ class _OrdersScreenState extends State<OrdersScreen>
             ),
           ),
           const SizedBox(width: 14),
-
-          // Order info
           Expanded(
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Text(
                   order['pharmacy'] as String,
-                  style: const TextStyle(
+                  style: TextStyle(
                     fontSize: 15,
                     fontWeight: FontWeight.w600,
-                    color: Color(0xFF1A1A1A),
+                    color: textColor,
                   ),
                 ),
                 const SizedBox(height: 4),
                 Text(
-                  '${order['id']}  •  ${order['date']}',
-                  style: TextStyle(fontSize: 13, color: Colors.grey.shade500),
+                  '${order['id']} • ${order['date']}',
+                  style: TextStyle(
+                    fontSize: 13,
+                    color: isDark ? Colors.grey.shade400 : Colors.grey.shade500,
+                  ),
                 ),
                 const SizedBox(height: 2),
                 Text(
                   '${order['prescriptions']} prescription(s)',
-                  style: TextStyle(fontSize: 12, color: Colors.grey.shade400),
+                  style: TextStyle(
+                    fontSize: 12,
+                    color: isDark ? Colors.grey.shade500 : Colors.grey.shade400,
+                  ),
                 ),
               ],
             ),
           ),
-
-          // Price and status
           Column(
             crossAxisAlignment: CrossAxisAlignment.end,
             children: [
               Text(
                 order['total'] as String,
-                style: const TextStyle(
+                style: TextStyle(
                   fontSize: 16,
                   fontWeight: FontWeight.w700,
-                  color: Color(0xFF1A1A1A),
+                  color: textColor,
                 ),
               ),
               const SizedBox(height: 4),
@@ -541,11 +566,11 @@ class _OrdersScreenState extends State<OrdersScreen>
     );
   }
 
-  // Empty state widget
   Widget _buildEmptyState({
     required IconData icon,
     required String title,
     required String subtitle,
+    required bool isDark,
   }) {
     return Center(
       child: Column(
@@ -558,13 +583,16 @@ class _OrdersScreenState extends State<OrdersScreen>
             style: TextStyle(
               fontSize: 18,
               fontWeight: FontWeight.w600,
-              color: Colors.grey.shade400,
+              color: isDark ? Colors.grey.shade500 : Colors.grey.shade400,
             ),
           ),
           const SizedBox(height: 4),
           Text(
             subtitle,
-            style: TextStyle(fontSize: 14, color: Colors.grey.shade400),
+            style: TextStyle(
+              fontSize: 14,
+              color: isDark ? Colors.grey.shade600 : Colors.grey.shade400,
+            ),
           ),
         ],
       ),

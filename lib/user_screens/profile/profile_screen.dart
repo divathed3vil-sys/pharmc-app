@@ -34,10 +34,15 @@ class _ProfileScreenState extends State<ProfileScreen> {
   }
 
   void _logout() {
+    final bool isDark = Theme.of(context).brightness == Brightness.dark;
+    final Color dialogBg = isDark ? const Color(0xFF1E1E1E) : Colors.white;
+    final Color dialogText = isDark ? Colors.white : const Color(0xFF1A1A1A);
+
     showDialog(
       context: context,
       builder: (context) => Dialog(
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+        backgroundColor: dialogBg,
         child: Padding(
           padding: const EdgeInsets.all(28),
           child: Column(
@@ -57,12 +62,12 @@ class _ProfileScreenState extends State<ProfileScreen> {
                 ),
               ),
               const SizedBox(height: 20),
-              const Text(
+              Text(
                 'Log Out?',
                 style: TextStyle(
                   fontSize: 20,
                   fontWeight: FontWeight.w700,
-                  color: Color(0xFF1A1A1A),
+                  color: dialogText,
                 ),
               ),
               const SizedBox(height: 8),
@@ -87,12 +92,18 @@ class _ProfileScreenState extends State<ProfileScreen> {
                           shape: RoundedRectangleBorder(
                             borderRadius: BorderRadius.circular(12),
                           ),
-                          side: BorderSide(color: Colors.grey.shade300),
+                          side: BorderSide(
+                            color: isDark
+                                ? Colors.grey.shade700
+                                : Colors.grey.shade300,
+                          ),
                         ),
                         child: Text(
                           'Cancel',
                           style: TextStyle(
-                            color: Colors.grey.shade600,
+                            color: isDark
+                                ? Colors.grey.shade400
+                                : Colors.grey.shade600,
                             fontWeight: FontWeight.w600,
                           ),
                         ),
@@ -141,10 +152,15 @@ class _ProfileScreenState extends State<ProfileScreen> {
   }
 
   void _deleteAccount() {
+    final bool isDark = Theme.of(context).brightness == Brightness.dark;
+    final Color dialogBg = isDark ? const Color(0xFF1E1E1E) : Colors.white;
+    final Color dialogText = isDark ? Colors.white : const Color(0xFF1A1A1A);
+
     showDialog(
       context: context,
       builder: (context) => Dialog(
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+        backgroundColor: dialogBg,
         child: Padding(
           padding: const EdgeInsets.all(28),
           child: Column(
@@ -164,12 +180,12 @@ class _ProfileScreenState extends State<ProfileScreen> {
                 ),
               ),
               const SizedBox(height: 20),
-              const Text(
+              Text(
                 'Delete Account?',
                 style: TextStyle(
                   fontSize: 20,
                   fontWeight: FontWeight.w700,
-                  color: Color(0xFF1A1A1A),
+                  color: dialogText,
                 ),
               ),
               const SizedBox(height: 8),
@@ -194,12 +210,18 @@ class _ProfileScreenState extends State<ProfileScreen> {
                           shape: RoundedRectangleBorder(
                             borderRadius: BorderRadius.circular(12),
                           ),
-                          side: BorderSide(color: Colors.grey.shade300),
+                          side: BorderSide(
+                            color: isDark
+                                ? Colors.grey.shade700
+                                : Colors.grey.shade300,
+                          ),
                         ),
                         child: Text(
                           'Cancel',
                           style: TextStyle(
-                            color: Colors.grey.shade600,
+                            color: isDark
+                                ? Colors.grey.shade400
+                                : Colors.grey.shade600,
                             fontWeight: FontWeight.w600,
                           ),
                         ),
@@ -212,7 +234,6 @@ class _ProfileScreenState extends State<ProfileScreen> {
                       height: 48,
                       child: ElevatedButton(
                         onPressed: () async {
-                          // Later: Delete from Supabase too
                           await PreferencesService.clearAll();
                           if (mounted) {
                             Navigator.pushAndRemoveUntil(
@@ -250,35 +271,40 @@ class _ProfileScreenState extends State<ProfileScreen> {
 
   @override
   Widget build(BuildContext context) {
-    // Get first letter for avatar
+    final bool isDark = Theme.of(context).brightness == Brightness.dark;
+    final Color textColor = isDark ? Colors.white : const Color(0xFF1A1A1A);
+    final Color subtextColor = isDark
+        ? Colors.grey.shade400
+        : Colors.grey.shade500;
+    final Color cardColor = isDark
+        ? const Color(0xFF1E1E1E)
+        : const Color(0xFFF8F9FA);
+    final Color backBg = isDark
+        ? const Color(0xFF2A2A2A)
+        : const Color(0xFFF5F5F5);
+
     String initial = _name.isNotEmpty ? _name[0].toUpperCase() : 'U';
 
     return Scaffold(
-      backgroundColor: Colors.white,
+      backgroundColor: Theme.of(context).scaffoldBackgroundColor,
       appBar: AppBar(
-        backgroundColor: Colors.white,
-        elevation: 0,
         leading: GestureDetector(
           onTap: () => Navigator.pop(context),
           child: Container(
             margin: const EdgeInsets.all(8),
             decoration: BoxDecoration(
-              color: const Color(0xFFF5F5F5),
+              color: backBg,
               borderRadius: BorderRadius.circular(12),
             ),
-            child: const Icon(
-              Icons.arrow_back_rounded,
-              color: Color(0xFF1A1A1A),
-              size: 20,
-            ),
+            child: Icon(Icons.arrow_back_rounded, color: textColor, size: 20),
           ),
         ),
-        title: const Text(
+        title: Text(
           'Profile',
           style: TextStyle(
             fontSize: 18,
             fontWeight: FontWeight.w600,
-            color: Color(0xFF1A1A1A),
+            color: textColor,
           ),
         ),
         centerTitle: true,
@@ -289,7 +315,6 @@ class _ProfileScreenState extends State<ProfileScreen> {
         child: Column(
           children: [
             const SizedBox(height: 16),
-
             // Profile avatar
             Stack(
               alignment: Alignment.bottomRight,
@@ -298,7 +323,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
                   width: 96,
                   height: 96,
                   decoration: BoxDecoration(
-                    color: Colors.teal.shade100,
+                    color: isDark ? Colors.teal.shade900 : Colors.teal.shade100,
                     shape: BoxShape.circle,
                   ),
                   child: Center(
@@ -312,10 +337,8 @@ class _ProfileScreenState extends State<ProfileScreen> {
                     ),
                   ),
                 ),
-                // Camera button for future profile picture
                 GestureDetector(
                   onTap: () {
-                    // Future: Pick profile image
                     ScaffoldMessenger.of(context).showSnackBar(
                       SnackBar(
                         content: const Text('Profile picture coming soon'),
@@ -333,7 +356,10 @@ class _ProfileScreenState extends State<ProfileScreen> {
                     decoration: BoxDecoration(
                       color: Colors.teal.shade600,
                       shape: BoxShape.circle,
-                      border: Border.all(color: Colors.white, width: 2),
+                      border: Border.all(
+                        color: isDark ? const Color(0xFF121212) : Colors.white,
+                        width: 2,
+                      ),
                     ),
                     child: const Icon(
                       Icons.camera_alt_rounded,
@@ -344,52 +370,49 @@ class _ProfileScreenState extends State<ProfileScreen> {
                 ),
               ],
             ),
-
             const SizedBox(height: 16),
-
-            // Name
             Text(
               _name,
-              style: const TextStyle(
+              style: TextStyle(
                 fontSize: 22,
                 fontWeight: FontWeight.w700,
-                color: Color(0xFF1A1A1A),
+                color: textColor,
               ),
             ),
-
             const SizedBox(height: 4),
-
-            // Phone
             Text(
               _phone.isNotEmpty ? '+94 $_phone' : 'No phone added',
-              style: TextStyle(fontSize: 15, color: Colors.grey.shade500),
+              style: TextStyle(fontSize: 15, color: subtextColor),
             ),
-
             const SizedBox(height: 32),
-
             // Info cards
-            _buildInfoSection(),
-
+            _buildInfoSection(isDark, cardColor, subtextColor),
             const SizedBox(height: 24),
-
             // Menu items
             _buildMenuItem(
               icon: Icons.edit_rounded,
               title: 'Edit Profile',
               subtitle: 'Update your personal details',
+              isDark: isDark,
+              cardColor: cardColor,
+              textColor: textColor,
+              subtextColor: subtextColor,
               onTap: () async {
                 await Navigator.push(
                   context,
                   MaterialPageRoute(builder: (_) => const EditProfileScreen()),
                 );
-                _loadProfile(); // Refresh after editing
+                _loadProfile();
               },
             ),
-
             _buildMenuItem(
               icon: Icons.location_on_outlined,
               title: 'Saved Addresses',
               subtitle: 'Manage delivery addresses',
+              isDark: isDark,
+              cardColor: cardColor,
+              textColor: textColor,
+              subtextColor: subtextColor,
               onTap: () {
                 ScaffoldMessenger.of(context).showSnackBar(
                   SnackBar(
@@ -403,11 +426,14 @@ class _ProfileScreenState extends State<ProfileScreen> {
                 );
               },
             ),
-
             _buildMenuItem(
               icon: Icons.settings_rounded,
               title: 'App Settings',
               subtitle: 'Theme, scale, notifications',
+              isDark: isDark,
+              cardColor: cardColor,
+              textColor: textColor,
+              subtextColor: subtextColor,
               onTap: () {
                 Navigator.push(
                   context,
@@ -415,11 +441,14 @@ class _ProfileScreenState extends State<ProfileScreen> {
                 );
               },
             ),
-
             _buildMenuItem(
               icon: Icons.help_outline_rounded,
               title: 'Help & Support',
               subtitle: 'FAQ, contact us',
+              isDark: isDark,
+              cardColor: cardColor,
+              textColor: textColor,
+              subtextColor: subtextColor,
               onTap: () {
                 ScaffoldMessenger.of(context).showSnackBar(
                   SnackBar(
@@ -433,36 +462,41 @@ class _ProfileScreenState extends State<ProfileScreen> {
                 );
               },
             ),
-
             _buildMenuItem(
               icon: Icons.info_outline_rounded,
               title: 'About ${AppConstants.appName}',
               subtitle: 'Version, terms, privacy',
+              isDark: isDark,
+              cardColor: cardColor,
+              textColor: textColor,
+              subtextColor: subtextColor,
               onTap: () {
-                _showAboutDialog();
+                _showAboutDialog(isDark);
               },
             ),
-
             const SizedBox(height: 16),
-
-            // Logout
             _buildMenuItem(
               icon: Icons.logout_rounded,
               title: 'Log Out',
               subtitle: 'Sign out of your account',
               isDestructive: true,
+              isDark: isDark,
+              cardColor: cardColor,
+              textColor: textColor,
+              subtextColor: subtextColor,
               onTap: _logout,
             ),
-
-            // Delete account
             _buildMenuItem(
               icon: Icons.delete_outline_rounded,
               title: 'Delete Account',
               subtitle: 'Permanently remove your data',
               isDestructive: true,
+              isDark: isDark,
+              cardColor: cardColor,
+              textColor: textColor,
+              subtextColor: subtextColor,
               onTap: _deleteAccount,
             ),
-
             const SizedBox(height: 32),
           ],
         ),
@@ -470,28 +504,56 @@ class _ProfileScreenState extends State<ProfileScreen> {
     );
   }
 
-  Widget _buildInfoSection() {
+  Widget _buildInfoSection(bool isDark, Color cardColor, Color subtextColor) {
     return Container(
       width: double.infinity,
       padding: const EdgeInsets.all(20),
       decoration: BoxDecoration(
-        color: const Color(0xFFF8F9FA),
+        color: cardColor,
         borderRadius: BorderRadius.circular(16),
       ),
       child: Row(
         mainAxisAlignment: MainAxisAlignment.spaceAround,
         children: [
-          _buildInfoItem(label: 'Age', value: _age > 0 ? '$_age' : '-'),
-          Container(width: 1, height: 40, color: Colors.grey.shade300),
-          _buildInfoItem(label: 'Email', value: _email.isNotEmpty ? '✓' : '—'),
-          Container(width: 1, height: 40, color: Colors.grey.shade300),
-          _buildInfoItem(label: 'Orders', value: '0'),
+          _buildInfoItem(
+            label: 'Age',
+            value: _age > 0 ? '$_age' : '-',
+            isDark: isDark,
+            subtextColor: subtextColor,
+          ),
+          Container(
+            width: 1,
+            height: 40,
+            color: isDark ? Colors.grey.shade700 : Colors.grey.shade300,
+          ),
+          _buildInfoItem(
+            label: 'Email',
+            value: _email.isNotEmpty ? '✓' : '—',
+            isDark: isDark,
+            subtextColor: subtextColor,
+          ),
+          Container(
+            width: 1,
+            height: 40,
+            color: isDark ? Colors.grey.shade700 : Colors.grey.shade300,
+          ),
+          _buildInfoItem(
+            label: 'Orders',
+            value: '0',
+            isDark: isDark,
+            subtextColor: subtextColor,
+          ),
         ],
       ),
     );
   }
 
-  Widget _buildInfoItem({required String label, required String value}) {
+  Widget _buildInfoItem({
+    required String label,
+    required String value,
+    required bool isDark,
+    required Color subtextColor,
+  }) {
     return Column(
       children: [
         Text(
@@ -503,10 +565,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
           ),
         ),
         const SizedBox(height: 4),
-        Text(
-          label,
-          style: TextStyle(fontSize: 13, color: Colors.grey.shade500),
-        ),
+        Text(label, style: TextStyle(fontSize: 13, color: subtextColor)),
       ],
     );
   }
@@ -516,6 +575,10 @@ class _ProfileScreenState extends State<ProfileScreen> {
     required String title,
     required String subtitle,
     required VoidCallback onTap,
+    required bool isDark,
+    required Color cardColor,
+    required Color textColor,
+    required Color subtextColor,
     bool isDestructive = false,
   }) {
     return GestureDetector(
@@ -526,8 +589,10 @@ class _ProfileScreenState extends State<ProfileScreen> {
         padding: const EdgeInsets.all(16),
         decoration: BoxDecoration(
           color: isDestructive
-              ? Colors.red.shade50.withOpacity(0.5)
-              : const Color(0xFFF8F9FA),
+              ? (isDark
+                    ? Colors.red.shade900.withOpacity(0.2)
+                    : Colors.red.shade50.withOpacity(0.5))
+              : cardColor,
           borderRadius: BorderRadius.circular(14),
         ),
         child: Row(
@@ -537,8 +602,8 @@ class _ProfileScreenState extends State<ProfileScreen> {
               height: 42,
               decoration: BoxDecoration(
                 color: isDestructive
-                    ? Colors.red.shade100
-                    : Colors.teal.shade50,
+                    ? (isDark ? Colors.red.shade900 : Colors.red.shade100)
+                    : (isDark ? Colors.teal.shade900 : Colors.teal.shade50),
                 borderRadius: BorderRadius.circular(12),
               ),
               child: Icon(
@@ -559,22 +624,20 @@ class _ProfileScreenState extends State<ProfileScreen> {
                     style: TextStyle(
                       fontSize: 15,
                       fontWeight: FontWeight.w600,
-                      color: isDestructive
-                          ? Colors.red.shade600
-                          : const Color(0xFF1A1A1A),
+                      color: isDestructive ? Colors.red.shade600 : textColor,
                     ),
                   ),
                   const SizedBox(height: 2),
                   Text(
                     subtitle,
-                    style: TextStyle(fontSize: 13, color: Colors.grey.shade500),
+                    style: TextStyle(fontSize: 13, color: subtextColor),
                   ),
                 ],
               ),
             ),
             Icon(
               Icons.chevron_right_rounded,
-              color: Colors.grey.shade400,
+              color: isDark ? Colors.grey.shade600 : Colors.grey.shade400,
               size: 22,
             ),
           ],
@@ -583,11 +646,14 @@ class _ProfileScreenState extends State<ProfileScreen> {
     );
   }
 
-  void _showAboutDialog() {
+  void _showAboutDialog(bool isDark) {
+    final Color dialogBg = isDark ? const Color(0xFF1E1E1E) : Colors.white;
+
     showDialog(
       context: context,
       builder: (context) => Dialog(
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+        backgroundColor: dialogBg,
         child: Padding(
           padding: const EdgeInsets.all(28),
           child: Column(

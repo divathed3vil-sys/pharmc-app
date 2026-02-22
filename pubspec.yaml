@@ -39,7 +39,7 @@ dev_dependencies:
   flutter_test:
     sdk: flutter
   shared_preferences: ^2.3.4
-  cupertino_icons: ^1.0.8
+  supabase_flutter: ^2.8.4
 
   # The "flutter_lints" package below contains a set of recommended lints to
   # encourage good coding practices. The lint set provided by the package is

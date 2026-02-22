@@ -29,7 +29,6 @@ class _PhoneScreenState extends State<PhoneScreen> {
 
   void _continue() async {
     await PreferencesService.setUserPhone(_phoneController.text.trim());
-
     if (mounted) {
       Navigator.push(
         context,
@@ -40,24 +39,36 @@ class _PhoneScreenState extends State<PhoneScreen> {
 
   @override
   Widget build(BuildContext context) {
+    final bool isDark = Theme.of(context).brightness == Brightness.dark;
+    final Color textColor = isDark ? Colors.white : const Color(0xFF1A1A1A);
+    final Color subtextColor = isDark
+        ? Colors.grey.shade400
+        : Colors.grey.shade500;
+    final Color inputBg = isDark
+        ? const Color(0xFF1E1E1E)
+        : const Color(0xFFF5F5F5);
+    final Color backBg = isDark
+        ? const Color(0xFF2A2A2A)
+        : const Color(0xFFF5F5F5);
+    final Color hintColor = isDark
+        ? Colors.grey.shade600
+        : Colors.grey.shade400;
+    final Color prefixColor = isDark
+        ? Colors.grey.shade400
+        : Colors.grey.shade600;
+
     return Scaffold(
-      backgroundColor: Colors.white,
+      backgroundColor: Theme.of(context).scaffoldBackgroundColor,
       appBar: AppBar(
-        backgroundColor: Colors.white,
-        elevation: 0,
         leading: GestureDetector(
           onTap: () => Navigator.pop(context),
           child: Container(
             margin: const EdgeInsets.all(8),
             decoration: BoxDecoration(
-              color: const Color(0xFFF5F5F5),
+              color: backBg,
               borderRadius: BorderRadius.circular(12),
             ),
-            child: const Icon(
-              Icons.arrow_back_rounded,
-              color: Color(0xFF1A1A1A),
-              size: 20,
-            ),
+            child: Icon(Icons.arrow_back_rounded, color: textColor, size: 20),
           ),
         ),
       ),
@@ -68,11 +79,8 @@ class _PhoneScreenState extends State<PhoneScreen> {
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               const SizedBox(height: 8),
-
-              _buildProgress(2, 3),
-
+              _buildProgress(2, 3, isDark),
               const SizedBox(height: 32),
-
               Text(
                 AppConstants.appName,
                 style: TextStyle(
@@ -82,45 +90,40 @@ class _PhoneScreenState extends State<PhoneScreen> {
                   letterSpacing: -0.5,
                 ),
               ),
-
               const SizedBox(height: 24),
-
-              const Text(
+              Text(
                 'Your phone number',
                 style: TextStyle(
                   fontSize: 26,
                   fontWeight: FontWeight.w700,
-                  color: Color(0xFF1A1A1A),
+                  color: textColor,
                 ),
               ),
-
               const SizedBox(height: 8),
-
               Text(
                 "We'll use this to contact you about your orders.",
-                style: TextStyle(fontSize: 15, color: Colors.grey.shade500),
+                style: TextStyle(fontSize: 15, color: subtextColor),
               ),
-
               const SizedBox(height: 32),
-
               // Phone input
               Container(
                 decoration: BoxDecoration(
-                  color: const Color(0xFFF5F5F5),
+                  color: inputBg,
                   borderRadius: BorderRadius.circular(14),
                 ),
                 child: TextField(
                   controller: _phoneController,
                   keyboardType: TextInputType.phone,
-                  style: const TextStyle(
+                  style: TextStyle(
                     fontSize: 18,
                     fontWeight: FontWeight.w500,
                     letterSpacing: 1.2,
+                    color: textColor,
                   ),
                   decoration: InputDecoration(
                     hintText: '7X XXX XXXX',
                     hintStyle: TextStyle(
-                      color: Colors.grey.shade400,
+                      color: hintColor,
                       fontWeight: FontWeight.w400,
                       letterSpacing: 1.2,
                     ),
@@ -131,7 +134,7 @@ class _PhoneScreenState extends State<PhoneScreen> {
                         style: TextStyle(
                           fontSize: 18,
                           fontWeight: FontWeight.w500,
-                          color: Colors.grey.shade600,
+                          color: prefixColor,
                         ),
                       ),
                     ),
@@ -147,9 +150,7 @@ class _PhoneScreenState extends State<PhoneScreen> {
                   ),
                 ),
               ),
-
               const Spacer(),
-
               SizedBox(
                 width: double.infinity,
                 height: 56,
@@ -157,7 +158,9 @@ class _PhoneScreenState extends State<PhoneScreen> {
                   onPressed: _canContinue ? _continue : null,
                   style: ElevatedButton.styleFrom(
                     backgroundColor: Colors.teal.shade600,
-                    disabledBackgroundColor: Colors.teal.shade100,
+                    disabledBackgroundColor: isDark
+                        ? Colors.teal.shade900
+                        : Colors.teal.shade100,
                     foregroundColor: Colors.white,
                     disabledForegroundColor: Colors.white60,
                     elevation: 0,
@@ -171,7 +174,6 @@ class _PhoneScreenState extends State<PhoneScreen> {
                   ),
                 ),
               ),
-
               const SizedBox(height: 32),
             ],
           ),
@@ -180,7 +182,7 @@ class _PhoneScreenState extends State<PhoneScreen> {
     );
   }
 
-  Widget _buildProgress(int current, int total) {
+  Widget _buildProgress(int current, int total, bool isDark) {
     return Row(
       children: List.generate(total, (index) {
         final isActive = index < current;
@@ -192,7 +194,7 @@ class _PhoneScreenState extends State<PhoneScreen> {
             decoration: BoxDecoration(
               color: isActive
                   ? (isCurrent ? Colors.teal.shade600 : Colors.teal.shade200)
-                  : Colors.grey.shade200,
+                  : (isDark ? Colors.grey.shade800 : Colors.grey.shade200),
               borderRadius: BorderRadius.circular(2),
             ),
           ),

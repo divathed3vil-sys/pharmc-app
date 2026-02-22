@@ -37,7 +37,7 @@ class _NameAgeScreenState extends State<NameAgeScreen> {
   void _continue() async {
     await PreferencesService.setUserName(_nameController.text.trim());
     await PreferencesService.setUserAge(int.parse(_ageController.text.trim()));
-    await PreferencesService.setUserRole('user');
+    await PreferencesService.setUserRole('customer');
 
     if (mounted) {
       Navigator.push(
@@ -49,24 +49,36 @@ class _NameAgeScreenState extends State<NameAgeScreen> {
 
   @override
   Widget build(BuildContext context) {
+    final bool isDark = Theme.of(context).brightness == Brightness.dark;
+    final Color textColor = isDark ? Colors.white : const Color(0xFF1A1A1A);
+    final Color subtextColor = isDark
+        ? Colors.grey.shade400
+        : Colors.grey.shade500;
+    final Color inputBg = isDark
+        ? const Color(0xFF1E1E1E)
+        : const Color(0xFFF5F5F5);
+    final Color backBg = isDark
+        ? const Color(0xFF2A2A2A)
+        : const Color(0xFFF5F5F5);
+    final Color hintColor = isDark
+        ? Colors.grey.shade600
+        : Colors.grey.shade400;
+    final Color iconColor = isDark
+        ? Colors.grey.shade400
+        : Colors.grey.shade500;
+
     return Scaffold(
-      backgroundColor: Colors.white,
+      backgroundColor: Theme.of(context).scaffoldBackgroundColor,
       appBar: AppBar(
-        backgroundColor: Colors.white,
-        elevation: 0,
         leading: GestureDetector(
           onTap: () => Navigator.pop(context),
           child: Container(
             margin: const EdgeInsets.all(8),
             decoration: BoxDecoration(
-              color: const Color(0xFFF5F5F5),
+              color: backBg,
               borderRadius: BorderRadius.circular(12),
             ),
-            child: const Icon(
-              Icons.arrow_back_rounded,
-              color: Color(0xFF1A1A1A),
-              size: 20,
-            ),
+            child: Icon(Icons.arrow_back_rounded, color: textColor, size: 20),
           ),
         ),
       ),
@@ -77,13 +89,8 @@ class _NameAgeScreenState extends State<NameAgeScreen> {
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               const SizedBox(height: 8),
-
-              // Progress indicator
-              _buildProgress(1, 3),
-
+              _buildProgress(1, 3, isDark),
               const SizedBox(height: 32),
-
-              // Logo
               Text(
                 AppConstants.appName,
                 style: TextStyle(
@@ -93,49 +100,44 @@ class _NameAgeScreenState extends State<NameAgeScreen> {
                   letterSpacing: -0.5,
                 ),
               ),
-
               const SizedBox(height: 24),
-
-              const Text(
+              Text(
                 "What's your name?",
                 style: TextStyle(
                   fontSize: 26,
                   fontWeight: FontWeight.w700,
-                  color: Color(0xFF1A1A1A),
+                  color: textColor,
                 ),
               ),
-
               const SizedBox(height: 8),
-
               Text(
                 'We use this to personalize your experience.',
-                style: TextStyle(fontSize: 15, color: Colors.grey.shade500),
+                style: TextStyle(fontSize: 15, color: subtextColor),
               ),
-
               const SizedBox(height: 32),
-
-              // Name field
               _buildInputField(
                 controller: _nameController,
                 hint: 'Full Name',
                 icon: Icons.person_outline_rounded,
                 keyboardType: TextInputType.name,
                 textCapitalization: TextCapitalization.words,
+                inputBg: inputBg,
+                hintColor: hintColor,
+                iconColor: iconColor,
+                textColor: textColor,
               ),
-
               const SizedBox(height: 16),
-
-              // Age field
               _buildInputField(
                 controller: _ageController,
                 hint: 'Age',
                 icon: Icons.cake_outlined,
                 keyboardType: TextInputType.number,
+                inputBg: inputBg,
+                hintColor: hintColor,
+                iconColor: iconColor,
+                textColor: textColor,
               ),
-
               const Spacer(),
-
-              // Continue button
               SizedBox(
                 width: double.infinity,
                 height: 56,
@@ -143,7 +145,9 @@ class _NameAgeScreenState extends State<NameAgeScreen> {
                   onPressed: _canContinue ? _continue : null,
                   style: ElevatedButton.styleFrom(
                     backgroundColor: Colors.teal.shade600,
-                    disabledBackgroundColor: Colors.teal.shade100,
+                    disabledBackgroundColor: isDark
+                        ? Colors.teal.shade900
+                        : Colors.teal.shade100,
                     foregroundColor: Colors.white,
                     disabledForegroundColor: Colors.white60,
                     elevation: 0,
@@ -157,7 +161,6 @@ class _NameAgeScreenState extends State<NameAgeScreen> {
                   ),
                 ),
               ),
-
               const SizedBox(height: 32),
             ],
           ),
@@ -170,26 +173,31 @@ class _NameAgeScreenState extends State<NameAgeScreen> {
     required TextEditingController controller,
     required String hint,
     required IconData icon,
+    required Color inputBg,
+    required Color hintColor,
+    required Color iconColor,
+    required Color textColor,
     TextInputType keyboardType = TextInputType.text,
     TextCapitalization textCapitalization = TextCapitalization.none,
   }) {
     return Container(
       decoration: BoxDecoration(
-        color: const Color(0xFFF5F5F5),
+        color: inputBg,
         borderRadius: BorderRadius.circular(14),
       ),
       child: TextField(
         controller: controller,
         keyboardType: keyboardType,
         textCapitalization: textCapitalization,
-        style: const TextStyle(fontSize: 17, fontWeight: FontWeight.w500),
+        style: TextStyle(
+          fontSize: 17,
+          fontWeight: FontWeight.w500,
+          color: textColor,
+        ),
         decoration: InputDecoration(
           hintText: hint,
-          hintStyle: TextStyle(
-            color: Colors.grey.shade400,
-            fontWeight: FontWeight.w400,
-          ),
-          prefixIcon: Icon(icon, color: Colors.grey.shade500, size: 22),
+          hintStyle: TextStyle(color: hintColor, fontWeight: FontWeight.w400),
+          prefixIcon: Icon(icon, color: iconColor, size: 22),
           border: InputBorder.none,
           contentPadding: const EdgeInsets.symmetric(
             horizontal: 16,
@@ -200,7 +208,7 @@ class _NameAgeScreenState extends State<NameAgeScreen> {
     );
   }
 
-  Widget _buildProgress(int current, int total) {
+  Widget _buildProgress(int current, int total, bool isDark) {
     return Row(
       children: List.generate(total, (index) {
         final isActive = index < current;
@@ -212,7 +220,7 @@ class _NameAgeScreenState extends State<NameAgeScreen> {
             decoration: BoxDecoration(
               color: isActive
                   ? (isCurrent ? Colors.teal.shade600 : Colors.teal.shade200)
-                  : Colors.grey.shade200,
+                  : (isDark ? Colors.grey.shade800 : Colors.grey.shade200),
               borderRadius: BorderRadius.circular(2),
             ),
           ),

@@ -9,14 +9,11 @@ class UploadPrescriptionScreen extends StatefulWidget {
 }
 
 class _UploadPrescriptionScreenState extends State<UploadPrescriptionScreen> {
-  // Track up to 3 uploaded images (simulated for now)
   final List<String> _uploadedImages = [];
   final int _maxImages = 3;
-
   String _selectedPharmacy = '';
   final TextEditingController _notesController = TextEditingController();
 
-  // Pharmacy list with "Any Pharmacy" as first option
   final List<Map<String, String>> _pharmacies = [
     {
       'name': 'Any Pharmacy',
@@ -61,14 +58,11 @@ class _UploadPrescriptionScreenState extends State<UploadPrescriptionScreen> {
       );
       return;
     }
-
     setState(() {
-      // Simulating image selection with a fake name
       _uploadedImages.add(
         'Prescription ${_uploadedImages.length + 1} ($source)',
       );
     });
-
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(
         content: Text('Image ${_uploadedImages.length} added from $source'),
@@ -86,10 +80,16 @@ class _UploadPrescriptionScreenState extends State<UploadPrescriptionScreen> {
   }
 
   void _submitOrder() {
+    final bool isDark = Theme.of(context).brightness == Brightness.dark;
+    final Color dialogTextColor = isDark
+        ? Colors.white
+        : const Color(0xFF1A1A1A);
+
     showDialog(
       context: context,
       builder: (context) => Dialog(
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+        backgroundColor: isDark ? const Color(0xFF1E1E1E) : Colors.white,
         child: Padding(
           padding: const EdgeInsets.all(28),
           child: Column(
@@ -109,12 +109,12 @@ class _UploadPrescriptionScreenState extends State<UploadPrescriptionScreen> {
                 ),
               ),
               const SizedBox(height: 20),
-              const Text(
+              Text(
                 'Order Submitted!',
                 style: TextStyle(
                   fontSize: 20,
                   fontWeight: FontWeight.w700,
-                  color: Color(0xFF1A1A1A),
+                  color: dialogTextColor,
                 ),
               ),
               const SizedBox(height: 8),
@@ -167,32 +167,53 @@ class _UploadPrescriptionScreenState extends State<UploadPrescriptionScreen> {
 
   @override
   Widget build(BuildContext context) {
+    final bool isDark = Theme.of(context).brightness == Brightness.dark;
+    final Color textColor = isDark ? Colors.white : const Color(0xFF1A1A1A);
+    final Color subtextColor = isDark
+        ? Colors.grey.shade400
+        : Colors.grey.shade500;
+    final Color cardColor = isDark
+        ? const Color(0xFF1E1E1E)
+        : const Color(0xFFF8F9FA);
+    final Color inputBg = isDark
+        ? const Color(0xFF1E1E1E)
+        : const Color(0xFFF5F5F5);
+    final Color backBg = isDark
+        ? const Color(0xFF2A2A2A)
+        : const Color(0xFFF5F5F5);
+    final Color hintColor = isDark
+        ? Colors.grey.shade600
+        : Colors.grey.shade400;
+    final Color borderColor = isDark
+        ? Colors.grey.shade700
+        : Colors.grey.shade300;
+    final Color uploadIconColor = isDark
+        ? Colors.grey.shade500
+        : Colors.grey.shade400;
+    final Color uploadTextColor = isDark
+        ? Colors.grey.shade400
+        : Colors.grey.shade600;
+
     return Scaffold(
-      backgroundColor: Colors.white,
+      backgroundColor: Theme.of(context).scaffoldBackgroundColor,
       appBar: AppBar(
-        backgroundColor: Colors.white,
-        elevation: 0,
         leading: GestureDetector(
           onTap: () => Navigator.pop(context),
           child: Container(
             margin: const EdgeInsets.all(8),
             decoration: BoxDecoration(
-              color: const Color(0xFFF5F5F5),
+              color: backBg,
               borderRadius: BorderRadius.circular(12),
             ),
-            child: const Icon(
-              Icons.arrow_back_rounded,
-              color: Color(0xFF1A1A1A),
-              size: 20,
-            ),
+            child: Icon(Icons.arrow_back_rounded, color: textColor, size: 20),
           ),
         ),
-        title: const Text(
+        title: Text(
           'Upload Prescription',
           style: TextStyle(
             fontSize: 18,
             fontWeight: FontWeight.w600,
-            color: Color(0xFF1A1A1A),
+            color: textColor,
           ),
         ),
         centerTitle: true,
@@ -204,28 +225,28 @@ class _UploadPrescriptionScreenState extends State<UploadPrescriptionScreen> {
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             const SizedBox(height: 8),
-
             // Step 1: Upload Images
-            _buildSectionLabel('1', 'Upload Prescriptions'),
+            _buildSectionLabel('1', 'Upload Prescriptions', textColor, isDark),
             const SizedBox(height: 4),
             Text(
               'You can upload up to $_maxImages prescriptions',
-              style: TextStyle(fontSize: 13, color: Colors.grey.shade400),
+              style: TextStyle(fontSize: 13, color: subtextColor),
             ),
             const SizedBox(height: 12),
-
-            // Show uploaded images list
             if (_uploadedImages.isNotEmpty) ...[
               ..._uploadedImages.asMap().entries.map(
-                (entry) => _buildImageCard(entry.key, entry.value),
+                (entry) => _buildImageCard(entry.key, entry.value, isDark),
               ),
               const SizedBox(height: 8),
             ],
-
-            // Show upload picker if under limit
-            if (_uploadedImages.length < _maxImages) _buildImagePicker(),
-
-            // Image counter
+            if (_uploadedImages.length < _maxImages)
+              _buildImagePicker(
+                isDark,
+                borderColor,
+                uploadIconColor,
+                uploadTextColor,
+                subtextColor,
+              ),
             if (_uploadedImages.isNotEmpty)
               Padding(
                 padding: const EdgeInsets.only(top: 8),
@@ -238,45 +259,42 @@ class _UploadPrescriptionScreenState extends State<UploadPrescriptionScreen> {
                   ),
                 ),
               ),
-
             const SizedBox(height: 28),
-
             // Step 2: Select Pharmacy
-            _buildSectionLabel('2', 'Choose Pharmacy'),
+            _buildSectionLabel('2', 'Choose Pharmacy', textColor, isDark),
             const SizedBox(height: 12),
-
-            ..._pharmacies.map((pharmacy) => _buildPharmacyCard(pharmacy)),
-
+            ..._pharmacies.map(
+              (pharmacy) => _buildPharmacyCard(
+                pharmacy,
+                isDark,
+                cardColor,
+                textColor,
+                subtextColor,
+              ),
+            ),
             const SizedBox(height: 28),
-
             // Step 3: Notes
-            _buildSectionLabel('3', 'Add Notes (Optional)'),
+            _buildSectionLabel('3', 'Add Notes (Optional)', textColor, isDark),
             const SizedBox(height: 12),
-
             Container(
               decoration: BoxDecoration(
-                color: const Color(0xFFF5F5F5),
+                color: inputBg,
                 borderRadius: BorderRadius.circular(14),
               ),
               child: TextField(
                 controller: _notesController,
                 maxLines: 3,
-                style: const TextStyle(fontSize: 15),
+                style: TextStyle(fontSize: 15, color: textColor),
                 decoration: InputDecoration(
                   hintText:
                       'E.g., "I only need the paracetamol, not the antibiotic"',
-                  hintStyle: TextStyle(
-                    color: Colors.grey.shade400,
-                    fontSize: 14,
-                  ),
+                  hintStyle: TextStyle(color: hintColor, fontSize: 14),
                   border: InputBorder.none,
                   contentPadding: const EdgeInsets.all(16),
                 ),
               ),
             ),
-
             const SizedBox(height: 32),
-
             // Submit button
             SizedBox(
               width: double.infinity,
@@ -285,7 +303,9 @@ class _UploadPrescriptionScreenState extends State<UploadPrescriptionScreen> {
                 onPressed: _canSubmit ? _submitOrder : null,
                 style: ElevatedButton.styleFrom(
                   backgroundColor: Colors.teal.shade600,
-                  disabledBackgroundColor: Colors.teal.shade100,
+                  disabledBackgroundColor: isDark
+                      ? Colors.teal.shade900
+                      : Colors.teal.shade100,
                   foregroundColor: Colors.white,
                   disabledForegroundColor: Colors.white60,
                   elevation: 0,
@@ -299,9 +319,7 @@ class _UploadPrescriptionScreenState extends State<UploadPrescriptionScreen> {
                 ),
               ),
             ),
-
             const SizedBox(height: 16),
-
             Center(
               child: Row(
                 mainAxisAlignment: MainAxisAlignment.center,
@@ -309,17 +327,16 @@ class _UploadPrescriptionScreenState extends State<UploadPrescriptionScreen> {
                   Icon(
                     Icons.lock_outline_rounded,
                     size: 14,
-                    color: Colors.grey.shade400,
+                    color: subtextColor,
                   ),
                   const SizedBox(width: 6),
                   Text(
                     'Your prescription is encrypted and secure',
-                    style: TextStyle(fontSize: 12, color: Colors.grey.shade400),
+                    style: TextStyle(fontSize: 12, color: subtextColor),
                   ),
                 ],
               ),
             ),
-
             const SizedBox(height: 32),
           ],
         ),
@@ -327,15 +344,19 @@ class _UploadPrescriptionScreenState extends State<UploadPrescriptionScreen> {
     );
   }
 
-  // Section label with step number
-  Widget _buildSectionLabel(String step, String title) {
+  Widget _buildSectionLabel(
+    String step,
+    String title,
+    Color textColor,
+    bool isDark,
+  ) {
     return Row(
       children: [
         Container(
           width: 28,
           height: 28,
           decoration: BoxDecoration(
-            color: Colors.teal.shade50,
+            color: isDark ? Colors.teal.shade900 : Colors.teal.shade50,
             borderRadius: BorderRadius.circular(8),
           ),
           child: Center(
@@ -352,24 +373,29 @@ class _UploadPrescriptionScreenState extends State<UploadPrescriptionScreen> {
         const SizedBox(width: 10),
         Text(
           title,
-          style: const TextStyle(
+          style: TextStyle(
             fontSize: 16,
             fontWeight: FontWeight.w600,
-            color: Color(0xFF1A1A1A),
+            color: textColor,
           ),
         ),
       ],
     );
   }
 
-  // Upload picker (Camera + Gallery buttons)
-  Widget _buildImagePicker() {
+  Widget _buildImagePicker(
+    bool isDark,
+    Color borderColor,
+    Color iconColor,
+    Color textColor,
+    Color subtextColor,
+  ) {
     return Container(
       width: double.infinity,
       padding: const EdgeInsets.all(24),
       decoration: BoxDecoration(
         border: Border.all(
-          color: Colors.grey.shade300,
+          color: borderColor,
           width: 1.5,
           strokeAlign: BorderSide.strokeAlignInside,
         ),
@@ -377,11 +403,7 @@ class _UploadPrescriptionScreenState extends State<UploadPrescriptionScreen> {
       ),
       child: Column(
         children: [
-          Icon(
-            Icons.cloud_upload_outlined,
-            size: 48,
-            color: Colors.grey.shade400,
-          ),
+          Icon(Icons.cloud_upload_outlined, size: 48, color: iconColor),
           const SizedBox(height: 12),
           Text(
             _uploadedImages.isEmpty
@@ -390,13 +412,13 @@ class _UploadPrescriptionScreenState extends State<UploadPrescriptionScreen> {
             style: TextStyle(
               fontSize: 15,
               fontWeight: FontWeight.w500,
-              color: Colors.grey.shade600,
+              color: textColor,
             ),
           ),
           const SizedBox(height: 4),
           Text(
             'JPG, PNG or PDF supported',
-            style: TextStyle(fontSize: 13, color: Colors.grey.shade400),
+            style: TextStyle(fontSize: 13, color: subtextColor),
           ),
           const SizedBox(height: 20),
           Row(
@@ -406,6 +428,7 @@ class _UploadPrescriptionScreenState extends State<UploadPrescriptionScreen> {
                   icon: Icons.camera_alt_rounded,
                   label: 'Camera',
                   onTap: () => _pickImage('Camera'),
+                  isDark: isDark,
                 ),
               ),
               const SizedBox(width: 12),
@@ -414,6 +437,7 @@ class _UploadPrescriptionScreenState extends State<UploadPrescriptionScreen> {
                   icon: Icons.photo_library_rounded,
                   label: 'Gallery',
                   onTap: () => _pickImage('Gallery'),
+                  isDark: isDark,
                 ),
               ),
             ],
@@ -423,18 +447,18 @@ class _UploadPrescriptionScreenState extends State<UploadPrescriptionScreen> {
     );
   }
 
-  // Camera / Gallery button
   Widget _buildPickerButton({
     required IconData icon,
     required String label,
     required VoidCallback onTap,
+    required bool isDark,
   }) {
     return GestureDetector(
       onTap: onTap,
       child: Container(
         padding: const EdgeInsets.symmetric(vertical: 14),
         decoration: BoxDecoration(
-          color: Colors.teal.shade50,
+          color: isDark ? Colors.teal.shade900 : Colors.teal.shade50,
           borderRadius: BorderRadius.circular(12),
         ),
         child: Row(
@@ -456,25 +480,28 @@ class _UploadPrescriptionScreenState extends State<UploadPrescriptionScreen> {
     );
   }
 
-  // Individual uploaded image card
-  Widget _buildImageCard(int index, String imageName) {
+  Widget _buildImageCard(int index, String imageName, bool isDark) {
     return Container(
       width: double.infinity,
       margin: const EdgeInsets.only(bottom: 8),
       padding: const EdgeInsets.all(14),
       decoration: BoxDecoration(
-        color: Colors.teal.shade50,
+        color: isDark
+            ? Colors.teal.shade900.withOpacity(0.3)
+            : Colors.teal.shade50,
         borderRadius: BorderRadius.circular(14),
-        border: Border.all(color: Colors.teal.shade200, width: 1.5),
+        border: Border.all(
+          color: isDark ? Colors.teal.shade700 : Colors.teal.shade200,
+          width: 1.5,
+        ),
       ),
       child: Row(
         children: [
-          // Thumbnail placeholder
           Container(
             width: 48,
             height: 48,
             decoration: BoxDecoration(
-              color: Colors.teal.shade100,
+              color: isDark ? Colors.teal.shade800 : Colors.teal.shade100,
               borderRadius: BorderRadius.circular(10),
             ),
             child: Icon(
@@ -484,8 +511,6 @@ class _UploadPrescriptionScreenState extends State<UploadPrescriptionScreen> {
             ),
           ),
           const SizedBox(width: 12),
-
-          // Image info
           Expanded(
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
@@ -495,19 +520,20 @@ class _UploadPrescriptionScreenState extends State<UploadPrescriptionScreen> {
                   style: TextStyle(
                     fontSize: 14,
                     fontWeight: FontWeight.w600,
-                    color: Colors.teal.shade800,
+                    color: isDark ? Colors.teal.shade300 : Colors.teal.shade800,
                   ),
                 ),
                 const SizedBox(height: 2),
                 Text(
                   'Tap × to remove',
-                  style: TextStyle(fontSize: 12, color: Colors.teal.shade500),
+                  style: TextStyle(
+                    fontSize: 12,
+                    color: isDark ? Colors.teal.shade400 : Colors.teal.shade500,
+                  ),
                 ),
               ],
             ),
           ),
-
-          // Remove button
           GestureDetector(
             onTap: () => _removeImage(index),
             child: Container(
@@ -529,8 +555,13 @@ class _UploadPrescriptionScreenState extends State<UploadPrescriptionScreen> {
     );
   }
 
-  // Pharmacy selection card
-  Widget _buildPharmacyCard(Map<String, String> pharmacy) {
+  Widget _buildPharmacyCard(
+    Map<String, String> pharmacy,
+    bool isDark,
+    Color cardColor,
+    Color textColor,
+    Color subtextColor,
+  ) {
     final isSelected = _selectedPharmacy == pharmacy['name'];
     final isAuto = pharmacy['type'] == 'auto';
 
@@ -546,39 +577,56 @@ class _UploadPrescriptionScreenState extends State<UploadPrescriptionScreen> {
         padding: const EdgeInsets.all(16),
         decoration: BoxDecoration(
           color: isSelected
-              ? (isAuto ? Colors.blue.shade50 : Colors.teal.shade50)
-              : const Color(0xFFF8F9FA),
+              ? (isAuto
+                    ? (isDark
+                          ? Colors.blue.shade900.withOpacity(0.3)
+                          : Colors.blue.shade50)
+                    : (isDark
+                          ? Colors.teal.shade900.withOpacity(0.3)
+                          : Colors.teal.shade50))
+              : cardColor,
           borderRadius: BorderRadius.circular(14),
           border: Border.all(
             color: isSelected
-                ? (isAuto ? Colors.blue.shade400 : Colors.teal.shade400)
+                ? (isAuto
+                      ? (isDark ? Colors.blue.shade700 : Colors.blue.shade400)
+                      : (isDark ? Colors.teal.shade700 : Colors.teal.shade400))
                 : Colors.transparent,
             width: 1.5,
           ),
         ),
         child: Row(
           children: [
-            // Icon
             Container(
               width: 44,
               height: 44,
               decoration: BoxDecoration(
                 color: isSelected
-                    ? (isAuto ? Colors.blue.shade100 : Colors.teal.shade100)
-                    : Colors.grey.shade200,
+                    ? (isAuto
+                          ? (isDark
+                                ? Colors.blue.shade800
+                                : Colors.blue.shade100)
+                          : (isDark
+                                ? Colors.teal.shade800
+                                : Colors.teal.shade100))
+                    : (isDark ? Colors.grey.shade800 : Colors.grey.shade200),
                 borderRadius: BorderRadius.circular(12),
               ),
               child: Icon(
                 isAuto ? Icons.near_me_rounded : Icons.local_pharmacy_rounded,
                 color: isSelected
-                    ? (isAuto ? Colors.blue.shade700 : Colors.teal.shade700)
-                    : Colors.grey.shade500,
+                    ? (isAuto
+                          ? (isDark
+                                ? Colors.blue.shade300
+                                : Colors.blue.shade700)
+                          : (isDark
+                                ? Colors.teal.shade300
+                                : Colors.teal.shade700))
+                    : (isDark ? Colors.grey.shade400 : Colors.grey.shade500),
                 size: 22,
               ),
             ),
             const SizedBox(width: 14),
-
-            // Info
             Expanded(
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
@@ -590,27 +638,35 @@ class _UploadPrescriptionScreenState extends State<UploadPrescriptionScreen> {
                       fontWeight: FontWeight.w600,
                       color: isSelected
                           ? (isAuto
-                                ? Colors.blue.shade800
-                                : Colors.teal.shade800)
-                          : const Color(0xFF1A1A1A),
+                                ? (isDark
+                                      ? Colors.blue.shade300
+                                      : Colors.blue.shade800)
+                                : (isDark
+                                      ? Colors.teal.shade300
+                                      : Colors.teal.shade800))
+                          : textColor,
                     ),
                   ),
                   const SizedBox(height: 2),
                   Text(
                     pharmacy['address']!,
-                    style: TextStyle(fontSize: 13, color: Colors.grey.shade500),
+                    style: TextStyle(fontSize: 13, color: subtextColor),
                   ),
                 ],
               ),
             ),
-
-            // Distance badge
             Container(
               padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
               decoration: BoxDecoration(
                 color: isSelected
-                    ? (isAuto ? Colors.blue.shade100 : Colors.teal.shade100)
-                    : Colors.grey.shade200,
+                    ? (isAuto
+                          ? (isDark
+                                ? Colors.blue.shade800
+                                : Colors.blue.shade100)
+                          : (isDark
+                                ? Colors.teal.shade800
+                                : Colors.teal.shade100))
+                    : (isDark ? Colors.grey.shade800 : Colors.grey.shade200),
                 borderRadius: BorderRadius.circular(8),
               ),
               child: Text(
@@ -619,18 +675,24 @@ class _UploadPrescriptionScreenState extends State<UploadPrescriptionScreen> {
                   fontSize: 12,
                   fontWeight: FontWeight.w600,
                   color: isSelected
-                      ? (isAuto ? Colors.blue.shade700 : Colors.teal.shade700)
-                      : Colors.grey.shade600,
+                      ? (isAuto
+                            ? (isDark
+                                  ? Colors.blue.shade300
+                                  : Colors.blue.shade700)
+                            : (isDark
+                                  ? Colors.teal.shade300
+                                  : Colors.teal.shade700))
+                      : (isDark ? Colors.grey.shade400 : Colors.grey.shade600),
                 ),
               ),
             ),
-
-            // Checkmark
             if (isSelected) ...[
               const SizedBox(width: 10),
               Icon(
                 Icons.check_circle_rounded,
-                color: isAuto ? Colors.blue.shade600 : Colors.teal.shade600,
+                color: isAuto
+                    ? (isDark ? Colors.blue.shade400 : Colors.blue.shade600)
+                    : (isDark ? Colors.teal.shade400 : Colors.teal.shade600),
                 size: 22,
               ),
             ],

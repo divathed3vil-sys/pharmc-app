@@ -1,12 +1,20 @@
 import 'package:flutter/material.dart';
 import 'preferences_service.dart';
 
-class ThemeService extends ChangeNotifier {
-  // ============ DARK MODE ============
-  String _darkMode = PreferencesService.getDarkMode();
+class ThemeService {
+  String _darkMode = 'system';
+  String _uiScale = 'normal';
 
-  String get darkMode => _darkMode;
+  ThemeService() {
+    reload();
+  }
 
+  void reload() {
+    _darkMode = PreferencesService.getDarkMode();
+    _uiScale = PreferencesService.getUiScale();
+  }
+
+  // ============ THEME MODE ============
   ThemeMode get themeMode {
     switch (_darkMode) {
       case 'dark':
@@ -18,17 +26,7 @@ class ThemeService extends ChangeNotifier {
     }
   }
 
-  Future<void> setDarkMode(String mode) async {
-    _darkMode = mode;
-    await PreferencesService.setDarkMode(mode);
-    notifyListeners();
-  }
-
   // ============ UI SCALE ============
-  String _uiScale = PreferencesService.getUiScale();
-
-  String get uiScale => _uiScale;
-
   double get scaleFactor {
     switch (_uiScale) {
       case 'medium':
@@ -40,13 +38,7 @@ class ThemeService extends ChangeNotifier {
     }
   }
 
-  Future<void> setUiScale(String scale) async {
-    _uiScale = scale;
-    await PreferencesService.setUiScale(scale);
-    notifyListeners();
-  }
-
-  // ============ THEME DATA ============
+  // ============ LIGHT THEME ============
   ThemeData get lightTheme => ThemeData(
     brightness: Brightness.light,
     colorScheme: ColorScheme.fromSeed(
@@ -58,6 +50,7 @@ class ThemeService extends ChangeNotifier {
     appBarTheme: const AppBarTheme(
       backgroundColor: Colors.white,
       elevation: 0,
+      scrolledUnderElevation: 0,
       iconTheme: IconThemeData(color: Color(0xFF1A1A1A)),
       titleTextStyle: TextStyle(
         color: Color(0xFF1A1A1A),
@@ -65,8 +58,15 @@ class ThemeService extends ChangeNotifier {
         fontWeight: FontWeight.w600,
       ),
     ),
+    elevatedButtonTheme: ElevatedButtonThemeData(
+      style: ElevatedButton.styleFrom(
+        elevation: 0,
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
+      ),
+    ),
   );
 
+  // ============ DARK THEME ============
   ThemeData get darkTheme => ThemeData(
     brightness: Brightness.dark,
     colorScheme: ColorScheme.fromSeed(
@@ -78,11 +78,18 @@ class ThemeService extends ChangeNotifier {
     appBarTheme: const AppBarTheme(
       backgroundColor: Color(0xFF121212),
       elevation: 0,
+      scrolledUnderElevation: 0,
       iconTheme: IconThemeData(color: Colors.white),
       titleTextStyle: TextStyle(
         color: Colors.white,
         fontSize: 18,
         fontWeight: FontWeight.w600,
+      ),
+    ),
+    elevatedButtonTheme: ElevatedButtonThemeData(
+      style: ElevatedButton.styleFrom(
+        elevation: 0,
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
       ),
     ),
   );

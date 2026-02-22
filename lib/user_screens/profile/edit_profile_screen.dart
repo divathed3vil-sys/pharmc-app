@@ -13,7 +13,6 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
   final TextEditingController _ageController = TextEditingController();
   final TextEditingController _phoneController = TextEditingController();
   final TextEditingController _emailController = TextEditingController();
-
   bool _hasChanges = false;
 
   @override
@@ -50,20 +49,16 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
     if (_nameController.text.trim().length >= 2) {
       await PreferencesService.setUserName(_nameController.text.trim());
     }
-
     final age = int.tryParse(_ageController.text.trim());
     if (age != null && age >= 10 && age <= 120) {
       await PreferencesService.setUserAge(age);
     }
-
     if (_phoneController.text.trim().length == 9) {
       await PreferencesService.setUserPhone(_phoneController.text.trim());
     }
-
     if (_emailController.text.trim().isNotEmpty) {
       await PreferencesService.setUserEmail(_emailController.text.trim());
     }
-
     if (mounted) {
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
@@ -81,32 +76,51 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
 
   @override
   Widget build(BuildContext context) {
+    final bool isDark = Theme.of(context).brightness == Brightness.dark;
+    final Color textColor = isDark ? Colors.white : const Color(0xFF1A1A1A);
+    // ignore: unused_local_variable
+    final Color subtextColor = isDark
+        ? Colors.grey.shade400
+        : Colors.grey.shade500;
+    final Color inputBg = isDark
+        ? const Color(0xFF1E1E1E)
+        : const Color(0xFFF5F5F5);
+    final Color backBg = isDark
+        ? const Color(0xFF2A2A2A)
+        : const Color(0xFFF5F5F5);
+    final Color hintColor = isDark
+        ? Colors.grey.shade600
+        : Colors.grey.shade400;
+    final Color iconColor = isDark
+        ? Colors.grey.shade400
+        : Colors.grey.shade500;
+    final Color labelColor = isDark
+        ? Colors.grey.shade400
+        : Colors.grey.shade600;
+    final Color prefixColor = isDark
+        ? Colors.grey.shade400
+        : Colors.grey.shade600;
+
     return Scaffold(
-      backgroundColor: Colors.white,
+      backgroundColor: Theme.of(context).scaffoldBackgroundColor,
       appBar: AppBar(
-        backgroundColor: Colors.white,
-        elevation: 0,
         leading: GestureDetector(
           onTap: () => Navigator.pop(context),
           child: Container(
             margin: const EdgeInsets.all(8),
             decoration: BoxDecoration(
-              color: const Color(0xFFF5F5F5),
+              color: backBg,
               borderRadius: BorderRadius.circular(12),
             ),
-            child: const Icon(
-              Icons.arrow_back_rounded,
-              color: Color(0xFF1A1A1A),
-              size: 20,
-            ),
+            child: Icon(Icons.arrow_back_rounded, color: textColor, size: 20),
           ),
         ),
-        title: const Text(
+        title: Text(
           'Edit Profile',
           style: TextStyle(
             fontSize: 18,
             fontWeight: FontWeight.w600,
-            color: Color(0xFF1A1A1A),
+            color: textColor,
           ),
         ),
         centerTitle: true,
@@ -118,8 +132,7 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             const SizedBox(height: 24),
-
-            _buildLabel('Full Name'),
+            _buildLabel('Full Name', labelColor),
             const SizedBox(height: 8),
             _buildField(
               controller: _nameController,
@@ -127,40 +140,45 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
               icon: Icons.person_outline_rounded,
               keyboardType: TextInputType.name,
               textCapitalization: TextCapitalization.words,
+              inputBg: inputBg,
+              hintColor: hintColor,
+              iconColor: iconColor,
+              textColor: textColor,
             ),
-
             const SizedBox(height: 20),
-
-            _buildLabel('Age'),
+            _buildLabel('Age', labelColor),
             const SizedBox(height: 8),
             _buildField(
               controller: _ageController,
               hint: 'Your age',
               icon: Icons.cake_outlined,
               keyboardType: TextInputType.number,
+              inputBg: inputBg,
+              hintColor: hintColor,
+              iconColor: iconColor,
+              textColor: textColor,
             ),
-
             const SizedBox(height: 20),
-
-            _buildLabel('Phone Number'),
+            _buildLabel('Phone Number', labelColor),
             const SizedBox(height: 8),
             Container(
               decoration: BoxDecoration(
-                color: const Color(0xFFF5F5F5),
+                color: inputBg,
                 borderRadius: BorderRadius.circular(14),
               ),
               child: TextField(
                 controller: _phoneController,
                 keyboardType: TextInputType.phone,
-                style: const TextStyle(
+                style: TextStyle(
                   fontSize: 17,
                   fontWeight: FontWeight.w500,
                   letterSpacing: 1.0,
+                  color: textColor,
                 ),
                 decoration: InputDecoration(
                   hintText: '7X XXX XXXX',
                   hintStyle: TextStyle(
-                    color: Colors.grey.shade400,
+                    color: hintColor,
                     fontWeight: FontWeight.w400,
                   ),
                   prefixIcon: Padding(
@@ -170,7 +188,7 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
                       style: TextStyle(
                         fontSize: 17,
                         fontWeight: FontWeight.w500,
-                        color: Colors.grey.shade600,
+                        color: prefixColor,
                       ),
                     ),
                   ),
@@ -186,20 +204,20 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
                 ),
               ),
             ),
-
             const SizedBox(height: 20),
-
-            _buildLabel('Email Address'),
+            _buildLabel('Email Address', labelColor),
             const SizedBox(height: 8),
             _buildField(
               controller: _emailController,
               hint: 'your@email.com',
               icon: Icons.email_outlined,
               keyboardType: TextInputType.emailAddress,
+              inputBg: inputBg,
+              hintColor: hintColor,
+              iconColor: iconColor,
+              textColor: textColor,
             ),
-
             const SizedBox(height: 40),
-
             // Save button
             SizedBox(
               width: double.infinity,
@@ -208,7 +226,9 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
                 onPressed: _hasChanges ? _save : null,
                 style: ElevatedButton.styleFrom(
                   backgroundColor: Colors.teal.shade600,
-                  disabledBackgroundColor: Colors.teal.shade100,
+                  disabledBackgroundColor: isDark
+                      ? Colors.teal.shade900
+                      : Colors.teal.shade100,
                   foregroundColor: Colors.white,
                   disabledForegroundColor: Colors.white60,
                   elevation: 0,
@@ -222,7 +242,6 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
                 ),
               ),
             ),
-
             const SizedBox(height: 32),
           ],
         ),
@@ -230,14 +249,10 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
     );
   }
 
-  Widget _buildLabel(String text) {
+  Widget _buildLabel(String text, Color color) {
     return Text(
       text,
-      style: TextStyle(
-        fontSize: 14,
-        fontWeight: FontWeight.w600,
-        color: Colors.grey.shade600,
-      ),
+      style: TextStyle(fontSize: 14, fontWeight: FontWeight.w600, color: color),
     );
   }
 
@@ -245,26 +260,31 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
     required TextEditingController controller,
     required String hint,
     required IconData icon,
+    required Color inputBg,
+    required Color hintColor,
+    required Color iconColor,
+    required Color textColor,
     TextInputType keyboardType = TextInputType.text,
     TextCapitalization textCapitalization = TextCapitalization.none,
   }) {
     return Container(
       decoration: BoxDecoration(
-        color: const Color(0xFFF5F5F5),
+        color: inputBg,
         borderRadius: BorderRadius.circular(14),
       ),
       child: TextField(
         controller: controller,
         keyboardType: keyboardType,
         textCapitalization: textCapitalization,
-        style: const TextStyle(fontSize: 17, fontWeight: FontWeight.w500),
+        style: TextStyle(
+          fontSize: 17,
+          fontWeight: FontWeight.w500,
+          color: textColor,
+        ),
         decoration: InputDecoration(
           hintText: hint,
-          hintStyle: TextStyle(
-            color: Colors.grey.shade400,
-            fontWeight: FontWeight.w400,
-          ),
-          prefixIcon: Icon(icon, color: Colors.grey.shade500, size: 22),
+          hintStyle: TextStyle(color: hintColor, fontWeight: FontWeight.w400),
+          prefixIcon: Icon(icon, color: iconColor, size: 22),
           border: InputBorder.none,
           contentPadding: const EdgeInsets.symmetric(
             horizontal: 16,

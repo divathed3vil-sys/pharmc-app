@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import '../../main.dart';
 import '../../services/preferences_service.dart';
 
 class SettingsScreen extends StatefulWidget {
@@ -23,34 +24,51 @@ class _SettingsScreenState extends State<SettingsScreen> {
     _language = PreferencesService.getLanguage();
   }
 
+  void _applyThemeChange() {
+    MyApp.refresh(context);
+  }
+
   @override
   Widget build(BuildContext context) {
+    // Get current theme colors dynamically
+    final bool isDark = Theme.of(context).brightness == Brightness.dark;
+    final Color cardColor = isDark
+        ? const Color(0xFF1E1E1E)
+        : const Color(0xFFF8F9FA);
+    final Color textColor = isDark ? Colors.white : const Color(0xFF1A1A1A);
+    final Color subtextColor = isDark
+        ? Colors.grey.shade400
+        : Colors.grey.shade500;
+    final Color iconBgColor = isDark
+        ? Colors.teal.shade900
+        : Colors.teal.shade50;
+    final Color selectorBg = isDark ? const Color(0xFF2A2A2A) : Colors.white;
+    final Color selectorBorder = isDark
+        ? Colors.grey.shade700
+        : Colors.grey.shade300;
+    final Color backButtonBg = isDark
+        ? const Color(0xFF2A2A2A)
+        : const Color(0xFFF5F5F5);
+
     return Scaffold(
-      backgroundColor: Colors.white,
       appBar: AppBar(
-        backgroundColor: Colors.white,
-        elevation: 0,
         leading: GestureDetector(
           onTap: () => Navigator.pop(context),
           child: Container(
             margin: const EdgeInsets.all(8),
             decoration: BoxDecoration(
-              color: const Color(0xFFF5F5F5),
+              color: backButtonBg,
               borderRadius: BorderRadius.circular(12),
             ),
-            child: const Icon(
-              Icons.arrow_back_rounded,
-              color: Color(0xFF1A1A1A),
-              size: 20,
-            ),
+            child: Icon(Icons.arrow_back_rounded, color: textColor, size: 20),
           ),
         ),
-        title: const Text(
+        title: Text(
           'Settings',
           style: TextStyle(
             fontSize: 18,
             fontWeight: FontWeight.w600,
-            color: Color(0xFF1A1A1A),
+            color: textColor,
           ),
         ),
         centerTitle: true,
@@ -64,14 +82,21 @@ class _SettingsScreenState extends State<SettingsScreen> {
             const SizedBox(height: 24),
 
             // Appearance section
-            _buildSectionTitle('Appearance'),
+            _buildSectionTitle('Appearance', subtextColor),
             const SizedBox(height: 12),
 
             // Dark mode
             _buildSettingCard(
               icon: Icons.dark_mode_outlined,
               title: 'Theme',
-              child: _buildThemeSelector(),
+              cardColor: cardColor,
+              textColor: textColor,
+              iconBgColor: iconBgColor,
+              child: _buildThemeSelector(
+                selectorBg,
+                selectorBorder,
+                subtextColor,
+              ),
             ),
 
             const SizedBox(height: 12),
@@ -80,13 +105,20 @@ class _SettingsScreenState extends State<SettingsScreen> {
             _buildSettingCard(
               icon: Icons.format_size_rounded,
               title: 'UI Scale',
-              child: _buildScaleSelector(),
+              cardColor: cardColor,
+              textColor: textColor,
+              iconBgColor: iconBgColor,
+              child: _buildScaleSelector(
+                selectorBg,
+                selectorBorder,
+                subtextColor,
+              ),
             ),
 
             const SizedBox(height: 28),
 
             // Notifications section
-            _buildSectionTitle('Notifications'),
+            _buildSectionTitle('Notifications', subtextColor),
             const SizedBox(height: 12),
 
             _buildToggleSetting(
@@ -94,6 +126,10 @@ class _SettingsScreenState extends State<SettingsScreen> {
               title: 'Order Updates',
               subtitle: 'Get notified about order status changes',
               value: _notifications,
+              cardColor: cardColor,
+              textColor: textColor,
+              subtextColor: subtextColor,
+              iconBgColor: iconBgColor,
               onChanged: (value) async {
                 setState(() => _notifications = value);
                 await PreferencesService.setNotificationsEnabled(value);
@@ -103,19 +139,26 @@ class _SettingsScreenState extends State<SettingsScreen> {
             const SizedBox(height: 28),
 
             // Language section
-            _buildSectionTitle('Language'),
+            _buildSectionTitle('Language', subtextColor),
             const SizedBox(height: 12),
 
             _buildSettingCard(
               icon: Icons.language_rounded,
               title: 'App Language',
-              child: _buildLanguageSelector(),
+              cardColor: cardColor,
+              textColor: textColor,
+              iconBgColor: iconBgColor,
+              child: _buildLanguageSelector(
+                selectorBg,
+                selectorBorder,
+                subtextColor,
+              ),
             ),
 
             const SizedBox(height: 28),
 
             // Storage section
-            _buildSectionTitle('Storage'),
+            _buildSectionTitle('Storage', subtextColor),
             const SizedBox(height: 12),
 
             GestureDetector(
@@ -135,7 +178,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
                 width: double.infinity,
                 padding: const EdgeInsets.all(16),
                 decoration: BoxDecoration(
-                  color: const Color(0xFFF8F9FA),
+                  color: cardColor,
                   borderRadius: BorderRadius.circular(14),
                 ),
                 child: Row(
@@ -144,7 +187,9 @@ class _SettingsScreenState extends State<SettingsScreen> {
                       width: 42,
                       height: 42,
                       decoration: BoxDecoration(
-                        color: Colors.orange.shade50,
+                        color: isDark
+                            ? Colors.orange.shade900.withOpacity(0.3)
+                            : Colors.orange.shade50,
                         borderRadius: BorderRadius.circular(12),
                       ),
                       child: Icon(
@@ -154,7 +199,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
                       ),
                     ),
                     const SizedBox(width: 14),
-                    const Expanded(
+                    Expanded(
                       child: Column(
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
@@ -163,20 +208,20 @@ class _SettingsScreenState extends State<SettingsScreen> {
                             style: TextStyle(
                               fontSize: 15,
                               fontWeight: FontWeight.w600,
-                              color: Color(0xFF1A1A1A),
+                              color: textColor,
                             ),
                           ),
-                          SizedBox(height: 2),
+                          const SizedBox(height: 2),
                           Text(
                             'Free up storage space',
-                            style: TextStyle(fontSize: 13, color: Colors.grey),
+                            style: TextStyle(fontSize: 13, color: subtextColor),
                           ),
                         ],
                       ),
                     ),
                     Icon(
                       Icons.chevron_right_rounded,
-                      color: Colors.grey.shade400,
+                      color: subtextColor,
                       size: 22,
                     ),
                   ],
@@ -191,13 +236,13 @@ class _SettingsScreenState extends State<SettingsScreen> {
     );
   }
 
-  Widget _buildSectionTitle(String title) {
+  Widget _buildSectionTitle(String title, Color color) {
     return Text(
       title,
       style: TextStyle(
         fontSize: 14,
         fontWeight: FontWeight.w700,
-        color: Colors.grey.shade500,
+        color: color,
         letterSpacing: 0.5,
       ),
     );
@@ -206,13 +251,16 @@ class _SettingsScreenState extends State<SettingsScreen> {
   Widget _buildSettingCard({
     required IconData icon,
     required String title,
+    required Color cardColor,
+    required Color textColor,
+    required Color iconBgColor,
     required Widget child,
   }) {
     return Container(
       width: double.infinity,
       padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
-        color: const Color(0xFFF8F9FA),
+        color: cardColor,
         borderRadius: BorderRadius.circular(14),
       ),
       child: Column(
@@ -224,7 +272,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
                 width: 42,
                 height: 42,
                 decoration: BoxDecoration(
-                  color: Colors.teal.shade50,
+                  color: iconBgColor,
                   borderRadius: BorderRadius.circular(12),
                 ),
                 child: Icon(icon, size: 20, color: Colors.teal.shade700),
@@ -232,10 +280,10 @@ class _SettingsScreenState extends State<SettingsScreen> {
               const SizedBox(width: 14),
               Text(
                 title,
-                style: const TextStyle(
+                style: TextStyle(
                   fontSize: 15,
                   fontWeight: FontWeight.w600,
-                  color: Color(0xFF1A1A1A),
+                  color: textColor,
                 ),
               ),
             ],
@@ -247,35 +295,67 @@ class _SettingsScreenState extends State<SettingsScreen> {
     );
   }
 
-  // Theme selector (System / Light / Dark)
-  Widget _buildThemeSelector() {
+  // Theme selector
+  Widget _buildThemeSelector(
+    Color selectorBg,
+    Color selectorBorder,
+    Color textColor,
+  ) {
     return Row(
       children: [
-        _buildThemeOption('system', 'System', Icons.phone_android_rounded),
+        _buildThemeOption(
+          'system',
+          'System',
+          Icons.phone_android_rounded,
+          selectorBg,
+          selectorBorder,
+          textColor,
+        ),
         const SizedBox(width: 8),
-        _buildThemeOption('light', 'Light', Icons.light_mode_rounded),
+        _buildThemeOption(
+          'light',
+          'Light',
+          Icons.light_mode_rounded,
+          selectorBg,
+          selectorBorder,
+          textColor,
+        ),
         const SizedBox(width: 8),
-        _buildThemeOption('dark', 'Dark', Icons.dark_mode_rounded),
+        _buildThemeOption(
+          'dark',
+          'Dark',
+          Icons.dark_mode_rounded,
+          selectorBg,
+          selectorBorder,
+          textColor,
+        ),
       ],
     );
   }
 
-  Widget _buildThemeOption(String value, String label, IconData icon) {
+  Widget _buildThemeOption(
+    String value,
+    String label,
+    IconData icon,
+    Color selectorBg,
+    Color selectorBorder,
+    Color textColor,
+  ) {
     final isSelected = _darkMode == value;
     return Expanded(
       child: GestureDetector(
         onTap: () async {
           setState(() => _darkMode = value);
           await PreferencesService.setDarkMode(value);
-          // Future: Actually apply theme via ThemeService
+          _applyThemeChange();
         },
         child: Container(
           padding: const EdgeInsets.symmetric(vertical: 12),
           decoration: BoxDecoration(
-            color: isSelected ? Colors.teal.shade600 : Colors.white,
+            color: isSelected ? Colors.teal.shade600 : selectorBg,
             borderRadius: BorderRadius.circular(10),
             border: Border.all(
-              color: isSelected ? Colors.teal.shade600 : Colors.grey.shade300,
+              color: isSelected ? Colors.teal.shade600 : selectorBorder,
               width: 1.5,
             ),
           ),
@@ -284,7 +364,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
               Icon(
                 icon,
                 size: 20,
-                color: isSelected ? Colors.white : Colors.grey.shade600,
+                color: isSelected ? Colors.white : textColor,
               ),
               const SizedBox(height: 6),
               Text(
@@ -292,7 +372,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
                 style: TextStyle(
                   fontSize: 12,
                   fontWeight: FontWeight.w600,
-                  color: isSelected ? Colors.white : Colors.grey.shade600,
+                  color: isSelected ? Colors.white : textColor,
                 ),
               ),
             ],
@@ -303,59 +383,55 @@ class _SettingsScreenState extends State<SettingsScreen> {
   }
 
   // UI Scale selector
-  Widget _buildScaleSelector() {
+  Widget _buildScaleSelector(
+    Color selectorBg,
+    Color selectorBorder,
+    Color textColor,
+  ) {
     final scales = [
-      {'value': 'normal', 'label': 'Normal', 'size': 'Aa'},
-      {'value': 'medium', 'label': 'Medium', 'size': 'Aa'},
-      {'value': 'large', 'label': 'Large', 'size': 'Aa'},
+      {'value': 'normal', 'label': 'Normal', 'fontSize': 16.0},
+      {'value': 'medium', 'label': 'Medium', 'fontSize': 20.0},
+      {'value': 'large', 'label': 'Large', 'fontSize': 24.0},
     ];
 
     return Row(
       children: scales.map((scale) {
         final isSelected = _uiScale == scale['value'];
-        final fontSize = scale['value'] == 'normal'
-            ? 16.0
-            : scale['value'] == 'medium'
-            ? 20.0
-            : 24.0;
-
         return Expanded(
           child: GestureDetector(
             onTap: () async {
-              setState(() => _uiScale = scale['value']!);
-              await PreferencesService.setUiScale(scale['value']!);
-              // Future: Actually apply scale via ThemeService
+              setState(() => _uiScale = scale['value'] as String);
+              await PreferencesService.setUiScale(scale['value'] as String);
+              _applyThemeChange();
             },
             child: Container(
               margin: EdgeInsets.only(right: scale['value'] != 'large' ? 8 : 0),
               padding: const EdgeInsets.symmetric(vertical: 12),
               decoration: BoxDecoration(
-                color: isSelected ? Colors.teal.shade600 : Colors.white,
+                color: isSelected ? Colors.teal.shade600 : selectorBg,
                 borderRadius: BorderRadius.circular(10),
                 border: Border.all(
-                  color: isSelected
-                      ? Colors.teal.shade600
-                      : Colors.grey.shade300,
+                  color: isSelected ? Colors.teal.shade600 : selectorBorder,
                   width: 1.5,
                 ),
               ),
               child: Column(
                 children: [
                   Text(
-                    scale['size']!,
+                    'Aa',
                     style: TextStyle(
-                      fontSize: fontSize,
+                      fontSize: scale['fontSize'] as double,
                       fontWeight: FontWeight.w700,
-                      color: isSelected ? Colors.white : Colors.grey.shade600,
+                      color: isSelected ? Colors.white : textColor,
                     ),
                   ),
                   const SizedBox(height: 4),
                   Text(
-                    scale['label']!,
+                    scale['label'] as String,
                     style: TextStyle(
                       fontSize: 12,
                       fontWeight: FontWeight.w600,
-                      color: isSelected ? Colors.white : Colors.grey.shade600,
+                      color: isSelected ? Colors.white : textColor,
                     ),
                   ),
                 ],
@@ -368,7 +444,11 @@ class _SettingsScreenState extends State<SettingsScreen> {
   }
 
   // Language selector
-  Widget _buildLanguageSelector() {
+  Widget _buildLanguageSelector(
+    Color selectorBg,
+    Color selectorBorder,
+    Color textColor,
+  ) {
     final languages = [
       {'value': 'en', 'label': 'English'},
       {'value': 'si', 'label': 'සිංහල'},
@@ -384,28 +464,28 @@ class _SettingsScreenState extends State<SettingsScreen> {
               setState(() => _language = lang['value']!);
               await PreferencesService.setLanguage(lang['value']!);
               if (lang['value'] != 'en') {
-                ScaffoldMessenger.of(context).showSnackBar(
-                  SnackBar(
-                    content: const Text('Translation coming soon'),
-                    backgroundColor: Colors.teal.shade600,
-                    behavior: SnackBarBehavior.floating,
-                    shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(10),
+                if (mounted) {
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    SnackBar(
+                      content: const Text('Translation coming soon'),
+                      backgroundColor: Colors.teal.shade600,
+                      behavior: SnackBarBehavior.floating,
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(10),
+                      ),
                     ),
-                  ),
-                );
+                  );
+                }
               }
             },
             child: Container(
               margin: EdgeInsets.only(right: lang['value'] != 'ta' ? 8 : 0),
               padding: const EdgeInsets.symmetric(vertical: 12),
               decoration: BoxDecoration(
-                color: isSelected ? Colors.teal.shade600 : Colors.white,
+                color: isSelected ? Colors.teal.shade600 : selectorBg,
                 borderRadius: BorderRadius.circular(10),
                 border: Border.all(
-                  color: isSelected
-                      ? Colors.teal.shade600
-                      : Colors.grey.shade300,
+                  color: isSelected ? Colors.teal.shade600 : selectorBorder,
                   width: 1.5,
                 ),
               ),
@@ -415,7 +495,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
                   style: TextStyle(
                     fontSize: 13,
                     fontWeight: FontWeight.w600,
-                    color: isSelected ? Colors.white : Colors.grey.shade600,
+                    color: isSelected ? Colors.white : textColor,
                   ),
                 ),
               ),
@@ -432,13 +512,17 @@ class _SettingsScreenState extends State<SettingsScreen> {
     required String title,
     required String subtitle,
     required bool value,
+    required Color cardColor,
+    required Color textColor,
+    required Color subtextColor,
+    required Color iconBgColor,
     required ValueChanged<bool> onChanged,
   }) {
     return Container(
       width: double.infinity,
       padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
-        color: const Color(0xFFF8F9FA),
+        color: cardColor,
         borderRadius: BorderRadius.circular(14),
       ),
       child: Row(
@@ -447,7 +531,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
             width: 42,
             height: 42,
             decoration: BoxDecoration(
-              color: Colors.teal.shade50,
+              color: iconBgColor,
               borderRadius: BorderRadius.circular(12),
             ),
             child: Icon(icon, size: 20, color: Colors.teal.shade700),
@@ -459,16 +543,16 @@ class _SettingsScreenState extends State<SettingsScreen> {
               children: [
                 Text(
                   title,
-                  style: const TextStyle(
+                  style: TextStyle(
                     fontSize: 15,
                     fontWeight: FontWeight.w600,
-                    color: Color(0xFF1A1A1A),
+                    color: textColor,
                   ),
                 ),
                 const SizedBox(height: 2),
                 Text(
                   subtitle,
-                  style: const TextStyle(fontSize: 13, color: Colors.grey),
+                  style: TextStyle(fontSize: 13, color: subtextColor),
                 ),
               ],
             ),
@@ -476,7 +560,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
           Switch(
             value: value,
             onChanged: onChanged,
-            activeColor: Colors.teal.shade600,
+            activeThumbColor: Colors.teal.shade600,
           ),
         ],
       ),

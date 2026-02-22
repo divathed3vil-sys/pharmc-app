@@ -13,9 +13,10 @@ class HomeScreen extends StatelessWidget {
     final String initial = userName.isNotEmpty
         ? userName[0].toUpperCase()
         : 'U';
+    final bool isDark = Theme.of(context).brightness == Brightness.dark;
 
     return Scaffold(
-      backgroundColor: Colors.white,
+      backgroundColor: Theme.of(context).scaffoldBackgroundColor,
       body: SafeArea(
         child: Padding(
           padding: const EdgeInsets.symmetric(horizontal: 24.0),
@@ -35,16 +36,20 @@ class HomeScreen extends StatelessWidget {
                         'Hello $userName 👋',
                         style: TextStyle(
                           fontSize: 16,
-                          color: Colors.grey.shade500,
+                          color: isDark
+                              ? Colors.grey.shade400
+                              : Colors.grey.shade500,
                         ),
                       ),
                       const SizedBox(height: 4),
-                      const Text(
+                      Text(
                         'What do you need today?',
                         style: TextStyle(
                           fontSize: 22,
                           fontWeight: FontWeight.w700,
-                          color: Color(0xFF1A1A1A),
+                          color: isDark
+                              ? Colors.white
+                              : const Color(0xFF1A1A1A),
                         ),
                       ),
                     ],
@@ -63,7 +68,9 @@ class HomeScreen extends StatelessWidget {
                       width: 44,
                       height: 44,
                       decoration: BoxDecoration(
-                        color: Colors.teal.shade50,
+                        color: isDark
+                            ? Colors.teal.shade900
+                            : Colors.teal.shade50,
                         borderRadius: BorderRadius.circular(14),
                       ),
                       child: Center(
@@ -105,7 +112,9 @@ class HomeScreen extends StatelessWidget {
                     borderRadius: BorderRadius.circular(20),
                     boxShadow: [
                       BoxShadow(
-                        color: Colors.teal.shade300.withOpacity(0.4),
+                        color: Colors.teal.shade300.withOpacity(
+                          isDark ? 0.2 : 0.4,
+                        ),
                         blurRadius: 20,
                         offset: const Offset(0, 10),
                       ),
@@ -175,12 +184,12 @@ class HomeScreen extends StatelessWidget {
               Row(
                 mainAxisAlignment: MainAxisAlignment.spaceBetween,
                 children: [
-                  const Text(
+                  Text(
                     'Recent Orders',
                     style: TextStyle(
                       fontSize: 18,
                       fontWeight: FontWeight.w700,
-                      color: Color(0xFF1A1A1A),
+                      color: isDark ? Colors.white : const Color(0xFF1A1A1A),
                     ),
                   ),
                   GestureDetector(
@@ -205,7 +214,7 @@ class HomeScreen extends StatelessWidget {
               const SizedBox(height: 16),
 
               // Recent orders list
-              Expanded(child: _buildRecentOrders(context)),
+              Expanded(child: _buildRecentOrders(context, isDark)),
             ],
           ),
         ),
@@ -213,7 +222,7 @@ class HomeScreen extends StatelessWidget {
     );
   }
 
-  Widget _buildRecentOrders(BuildContext context) {
+  Widget _buildRecentOrders(BuildContext context, bool isDark) {
     final orders = [
       {
         'id': '#ORD-001',
@@ -276,13 +285,13 @@ class HomeScreen extends StatelessWidget {
     return ListView.separated(
       physics: const BouncingScrollPhysics(),
       itemCount: orders.length,
-      separatorBuilder: (_, __) => const SizedBox(height: 12),
+      separatorBuilder: (_, _) => const SizedBox(height: 12),
       itemBuilder: (context, index) {
         final order = orders[index];
         return Container(
           padding: const EdgeInsets.all(16),
           decoration: BoxDecoration(
-            color: const Color(0xFFF8F9FA),
+            color: isDark ? const Color(0xFF1E1E1E) : const Color(0xFFF8F9FA),
             borderRadius: BorderRadius.circular(16),
           ),
           child: Row(
@@ -307,10 +316,10 @@ class HomeScreen extends StatelessWidget {
                   children: [
                     Text(
                       order['pharmacy'] as String,
-                      style: const TextStyle(
+                      style: TextStyle(
                         fontSize: 15,
                         fontWeight: FontWeight.w600,
-                        color: Color(0xFF1A1A1A),
+                        color: isDark ? Colors.white : const Color(0xFF1A1A1A),
                       ),
                     ),
                     const SizedBox(height: 4),
@@ -318,7 +327,9 @@ class HomeScreen extends StatelessWidget {
                       '${order['id']}  •  ${order['date']}',
                       style: TextStyle(
                         fontSize: 13,
-                        color: Colors.grey.shade500,
+                        color: isDark
+                            ? Colors.grey.shade400
+                            : Colors.grey.shade500,
                       ),
                     ),
                   ],
@@ -329,10 +340,10 @@ class HomeScreen extends StatelessWidget {
                 children: [
                   Text(
                     order['total'] as String,
-                    style: const TextStyle(
+                    style: TextStyle(
                       fontSize: 15,
                       fontWeight: FontWeight.w700,
-                      color: Color(0xFF1A1A1A),
+                      color: isDark ? Colors.white : const Color(0xFF1A1A1A),
                     ),
                   ),
                   const SizedBox(height: 4),
