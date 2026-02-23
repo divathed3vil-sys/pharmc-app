@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
 import '../constants.dart';
-import '../user_screens/registration/name_age_screen.dart';
+import '../user_screens/registration/create_account_screen.dart';
 
 class RoleSelectionScreen extends StatelessWidget {
   const RoleSelectionScreen({super.key});
@@ -64,7 +64,9 @@ class RoleSelectionScreen extends StatelessWidget {
                 onTap: () {
                   Navigator.pushReplacement(
                     context,
-                    MaterialPageRoute(builder: (_) => const NameAgeScreen()),
+                    MaterialPageRoute(
+                      builder: (_) => const CreateAccountScreen(),
+                    ),
                   );
                 },
               ),

@@ -9,7 +9,6 @@ class AuthService {
     required String email,
     required String password,
     required String fullName,
-    required int age,
     required String phone,
     required String role,
   }) async {
@@ -26,21 +25,15 @@ class AuthService {
         );
       }
 
-      // Update profile in Supabase
+      // Update profile with user details
       await _client
           .from('profiles')
-          .update({
-            'full_name': fullName,
-            'age': age,
-            'phone': phone,
-            'role': role,
-          })
+          .update({'full_name': fullName, 'phone': phone, 'role': role})
           .eq('id', response.user!.id);
 
       // Cache locally
       await _cacheUserLocally(
         name: fullName,
-        age: age,
         phone: phone,
         email: email,
         role: role,
@@ -48,7 +41,7 @@ class AuthService {
 
       return AuthResult(
         success: true,
-        message: 'Account created! Please check your email to verify.',
+        message: 'Account created! Please verify your email.',
         needsVerification: true,
       );
     } on AuthException catch (e) {
@@ -79,7 +72,6 @@ class AuthService {
         );
       }
 
-      // Check if email is verified
       if (response.user!.emailConfirmedAt == null) {
         return AuthResult(
           success: false,
@@ -88,7 +80,7 @@ class AuthService {
         );
       }
 
-      // Fetch profile from Supabase and cache locally
+      // Sync profile to local
       await syncProfileToLocal();
 
       return AuthResult(success: true, message: 'Welcome back!');
@@ -116,21 +108,16 @@ class AuthService {
         return AuthResult(success: false, message: 'No user logged in.');
       }
 
-      // Delete profile (cascade will handle related data)
       await _client.from('profiles').delete().eq('id', user.id);
-
       await signOut();
 
       return AuthResult(success: true, message: 'Account deleted.');
     } catch (e) {
-      return AuthResult(
-        success: false,
-        message: 'Failed to delete account. Please try again.',
-      );
+      return AuthResult(success: false, message: 'Failed to delete account.');
     }
   }
 
-  // ============ RESEND VERIFICATION EMAIL ============
+  // ============ RESEND VERIFICATION ============
   static Future<AuthResult> resendVerificationEmail(String email) async {
     try {
       await _client.auth.resend(type: OtpType.signup, email: email);
@@ -138,7 +125,7 @@ class AuthService {
     } catch (e) {
       return AuthResult(
         success: false,
-        message: 'Failed to send email. Please try again.',
+        message: 'Failed to send email. Try again.',
       );
     }
   }
@@ -147,20 +134,19 @@ class AuthService {
   static Future<AuthResult> resetPassword(String email) async {
     try {
       await _client.auth.resetPasswordForEmail(email);
-      return AuthResult(success: true, message: 'Password reset email sent!');
+      return AuthResult(success: true, message: 'Reset email sent!');
     } catch (e) {
       return AuthResult(success: false, message: 'Failed to send reset email.');
     }
   }
 
-  // ============ CHECK AUTH STATE ============
+  // ============ STATE CHECKS ============
   static bool isLoggedIn() {
     return _client.auth.currentUser != null;
   }
 
   static bool isEmailVerified() {
-    final user = _client.auth.currentUser;
-    return user?.emailConfirmedAt != null;
+    return _client.auth.currentUser?.emailConfirmedAt != null;
   }
 
   static String? getCurrentUserId() {
@@ -185,14 +171,11 @@ class AuthService {
 
       await _cacheUserLocally(
         name: data['full_name'] ?? '',
-        age: data['age'] ?? 0,
         phone: data['phone'] ?? '',
         email: data['email'] ?? user.email ?? '',
         role: data['role'] ?? 'customer',
       );
-    } catch (e) {
-      // Silently fail - local cache still works
-    }
+    } catch (_) {}
   }
 
   static Future<void> updateProfile({
@@ -216,7 +199,6 @@ class AuthService {
 
       await _client.from('profiles').update(updates).eq('id', user.id);
 
-      // Update local cache too
       if (fullName != null) await PreferencesService.setUserName(fullName);
       if (age != null) await PreferencesService.setUserAge(age);
       if (phone != null) await PreferencesService.setUserPhone(phone);
@@ -229,13 +211,11 @@ class AuthService {
   // ============ HELPERS ============
   static Future<void> _cacheUserLocally({
     required String name,
-    required int age,
     required String phone,
     required String email,
     required String role,
   }) async {
     await PreferencesService.setUserName(name);
-    await PreferencesService.setUserAge(age);
     await PreferencesService.setUserPhone(phone);
     await PreferencesService.setUserEmail(email);
     await PreferencesService.setUserRole(role);
@@ -246,7 +226,7 @@ class AuthService {
     final msg = message.toLowerCase();
     if (msg.contains('already registered') ||
         msg.contains('already been registered')) {
-      return 'This email is already registered. Try logging in.';
+      return 'This email is already registered. Try signing in.';
     }
     if (msg.contains('invalid login') ||
         msg.contains('invalid email or password')) {
@@ -268,7 +248,6 @@ class AuthService {
   }
 }
 
-// ============ RESULT MODEL ============
 class AuthResult {
   final bool success;
   final String message;

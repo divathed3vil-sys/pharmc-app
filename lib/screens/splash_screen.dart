@@ -3,6 +3,7 @@ import '../constants.dart';
 import '../services/preferences_service.dart';
 import 'role_selection_screen.dart';
 import '../user_screens/home_screen.dart';
+import '../services/auth_service.dart';
 
 class SplashScreen extends StatefulWidget {
   const SplashScreen({super.key});
@@ -57,10 +58,11 @@ class _SplashScreenState extends State<SplashScreen>
 
       if (mounted) {
         // Decide where to go
-        final bool registered = PreferencesService.isRegistered();
+        final bool loggedIn =
+            AuthService.isLoggedIn() && AuthService.isEmailVerified();
 
         Widget destination;
-        if (registered) {
+        if (loggedIn) {
           destination = const HomeScreen();
         } else {
           destination = const RoleSelectionScreen();
