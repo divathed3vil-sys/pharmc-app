@@ -9,9 +9,9 @@ void main() async {
 
   // Initialize Supabase
   await Supabase.initialize(
-    url: 'https://nlfncfkxznblqmxblwpa.supabase.co',
+    url: 'https://bohcsmhjpmfztgarbyst.supabase.co',
     anonKey:
-        'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Im5sZm5jZmt4em5ibHFteGJsd3BhIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzE1OTU0MTQsImV4cCI6MjA4NzE3MTQxNH0.GSeThrDc0Z8-6PiqHOzXPulFS2HZxvRNTYjMaLAIyK4',
+        'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImJvaGNzbWhqcG1menRnYXJieXN0Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzE4MDUxNTcsImV4cCI6MjA4NzM4MTE1N30.s17zOqI93Tqrc5jNlKxNE-ISxWzuF7bDXd5omsRbR7Y',
   );
 
   // Initialize SharedPreferences
