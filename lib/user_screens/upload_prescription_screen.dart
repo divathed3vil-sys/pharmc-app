@@ -1,5 +1,4 @@
 import 'dart:typed_data';
-import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter/material.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:file_picker/file_picker.dart';
@@ -84,51 +83,48 @@ class _UploadPrescriptionScreenState extends State<UploadPrescriptionScreen> {
             ),
             const SizedBox(height: 20),
             Text(
-              'Select Image Source',
+              'Upload Prescription',
               style: TextStyle(
                 fontSize: 18,
                 fontWeight: FontWeight.w700,
                 color: isDark ? Colors.white : const Color(0xFF1A1A1A),
               ),
             ),
-            const SizedBox(height: 24),
-            Row(
-              mainAxisAlignment: MainAxisAlignment.spaceEvenly,
-              children: [
-                // Camera Option (hidden on Web since it doesn't work)
-                if (!kIsWeb)
-                  _buildSourceOption(
-                    Icons.camera_alt_rounded,
-                    'Camera',
-                    Colors.blue,
-                    isDark,
-                    () {
-                      Navigator.pop(context);
-                      _pickFromCamera();
-                    },
-                  ),
-                _buildSourceOption(
-                  Icons.photo_library_rounded,
-                  'Gallery',
-                  Colors.green,
-                  isDark,
-                  () {
-                    Navigator.pop(context);
-                    _pickFromGallery();
-                  },
-                ),
-                _buildSourceOption(
-                  Icons.folder_rounded,
-                  'Files',
-                  Colors.orange,
-                  isDark,
-                  () {
-                    Navigator.pop(context);
-                    _pickFromFiles();
-                  },
-                ),
-              ],
+            const SizedBox(height: 8),
+            Text(
+              'Choose how to add your prescription',
+              style: TextStyle(fontSize: 14, color: Colors.grey.shade500),
             ),
+            const SizedBox(height: 24),
+
+            // Camera Option
+            _buildSourceTile(
+              icon: Icons.camera_alt_rounded,
+              title: 'Take Photo',
+              subtitle: 'Use camera to capture prescription',
+              color: Colors.blue,
+              isDark: isDark,
+              onTap: () {
+                Navigator.pop(context);
+                _pickFromCamera();
+              },
+            ),
+
+            const SizedBox(height: 12),
+
+            // Files Option
+            _buildSourceTile(
+              icon: Icons.folder_rounded,
+              title: 'Choose from Files',
+              subtitle: 'Select image from your device',
+              color: Colors.orange,
+              isDark: isDark,
+              onTap: () {
+                Navigator.pop(context);
+                _pickFromFiles();
+              },
+            ),
+
             const SizedBox(height: 16),
           ],
         ),
@@ -136,36 +132,65 @@ class _UploadPrescriptionScreenState extends State<UploadPrescriptionScreen> {
     );
   }
 
-  Widget _buildSourceOption(
-    IconData icon,
-    String label,
-    Color color,
-    bool isDark,
-    VoidCallback onTap,
-  ) {
+  Widget _buildSourceTile({
+    required IconData icon,
+    required String title,
+    required String subtitle,
+    required Color color,
+    required bool isDark,
+    required VoidCallback onTap,
+  }) {
     return GestureDetector(
       onTap: onTap,
-      child: Column(
-        children: [
-          Container(
-            width: 64,
-            height: 64,
-            decoration: BoxDecoration(
-              color: isDark ? color.withOpacity(0.15) : color.withOpacity(0.1),
-              borderRadius: BorderRadius.circular(16),
-            ),
-            child: Icon(icon, color: color, size: 30),
+      child: Container(
+        width: double.infinity,
+        padding: const EdgeInsets.all(16),
+        decoration: BoxDecoration(
+          color: isDark ? color.withOpacity(0.1) : color.withOpacity(0.05),
+          borderRadius: BorderRadius.circular(14),
+          border: Border.all(
+            color: isDark ? color.withOpacity(0.3) : color.withOpacity(0.2),
           ),
-          const SizedBox(height: 8),
-          Text(
-            label,
-            style: TextStyle(
-              fontSize: 13,
-              fontWeight: FontWeight.w600,
-              color: isDark ? Colors.grey.shade300 : Colors.grey.shade700,
+        ),
+        child: Row(
+          children: [
+            Container(
+              width: 48,
+              height: 48,
+              decoration: BoxDecoration(
+                color: isDark ? color.withOpacity(0.2) : color.withOpacity(0.1),
+                borderRadius: BorderRadius.circular(12),
+              ),
+              child: Icon(icon, color: color, size: 24),
             ),
-          ),
-        ],
+            const SizedBox(width: 14),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    title,
+                    style: TextStyle(
+                      fontSize: 15,
+                      fontWeight: FontWeight.w600,
+                      color: isDark ? Colors.white : const Color(0xFF1A1A1A),
+                    ),
+                  ),
+                  const SizedBox(height: 2),
+                  Text(
+                    subtitle,
+                    style: TextStyle(fontSize: 13, color: Colors.grey.shade500),
+                  ),
+                ],
+              ),
+            ),
+            Icon(
+              Icons.chevron_right_rounded,
+              color: Colors.grey.shade400,
+              size: 22,
+            ),
+          ],
+        ),
       ),
     );
   }
@@ -187,26 +212,6 @@ class _UploadPrescriptionScreenState extends State<UploadPrescriptionScreen> {
       }
     } catch (e) {
       debugPrint('Camera error: $e');
-    }
-  }
-
-  Future<void> _pickFromGallery() async {
-    if (_selectedFiles.length >= _maxImages) return;
-    try {
-      final XFile? image = await _imagePicker.pickImage(
-        source: ImageSource.gallery,
-        imageQuality: 80,
-      );
-      if (image != null) {
-        final bytes = await image.readAsBytes();
-        setState(() {
-          _selectedFiles.add(
-            PickedImage(name: image.name, size: bytes.length, bytes: bytes),
-          );
-        });
-      }
-    } catch (e) {
-      debugPrint('Gallery error: $e');
     }
   }
 
@@ -286,7 +291,6 @@ class _UploadPrescriptionScreenState extends State<UploadPrescriptionScreen> {
 
       // 2. Upload each image
       for (var file in _selectedFiles) {
-        final fileExt = file.name.split('.').last;
         final fileName =
             '${DateTime.now().millisecondsSinceEpoch}_${file.name}';
         final filePath = '$userId/$fileName';
