@@ -16,6 +16,7 @@ class AuthService {
       final response = await _client.auth.signUp(
         email: email,
         password: password,
+        data: {'full_name': fullName, 'phone': phone, 'role': role},
       );
 
       if (response.user == null) {
@@ -24,12 +25,6 @@ class AuthService {
           message: 'Sign up failed. Please try again.',
         );
       }
-
-      // Update profile with user details
-      await _client
-          .from('profiles')
-          .update({'full_name': fullName, 'phone': phone, 'role': role})
-          .eq('id', response.user!.id);
 
       // Cache locally
       await _cacheUserLocally(
