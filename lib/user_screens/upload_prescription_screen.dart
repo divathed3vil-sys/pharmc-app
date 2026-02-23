@@ -1,4 +1,7 @@
+import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
+import '../../main.dart'; // To access global supabase client
+import 'address/saved_addresses_screen.dart';
 
 class UploadPrescriptionScreen extends StatefulWidget {
   const UploadPrescriptionScreen({super.key});
@@ -9,11 +12,14 @@ class UploadPrescriptionScreen extends StatefulWidget {
 }
 
 class _UploadPrescriptionScreenState extends State<UploadPrescriptionScreen> {
-  final List<String> _uploadedImages = [];
+  // Store the actual file objects (PlatformFile contains bytes for web)
+  final List<PlatformFile> _selectedFiles = [];
   final int _maxImages = 3;
-  String _selectedPharmacy = '';
+  String _selectedPharmacy = 'Any Pharmacy'; // Default
   final TextEditingController _notesController = TextEditingController();
+  bool _isUploading = false;
 
+  // Hardcoded pharmacies for now (Will come from DB later)
   final List<Map<String, String>> _pharmacies = [
     {
       'name': 'Any Pharmacy',
@@ -33,63 +39,146 @@ class _UploadPrescriptionScreenState extends State<UploadPrescriptionScreen> {
       'distance': '2.8 km',
       'type': 'specific',
     },
-    {
-      'name': 'MediCare Pharmacy',
-      'address': '78 Kandy Road, Kaduwela',
-      'distance': '4.1 km',
-      'type': 'specific',
-    },
   ];
 
   bool get _canSubmit =>
-      _uploadedImages.isNotEmpty && _selectedPharmacy.isNotEmpty;
+      _selectedFiles.isNotEmpty &&
+      _selectedPharmacy.isNotEmpty &&
+      !_isUploading;
 
-  void _pickImage(String source) {
-    if (_uploadedImages.length >= _maxImages) {
+  // 1. Pick Images using file_picker
+  void _pickImage() async {
+    if (_selectedFiles.length >= _maxImages) {
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: const Text('Maximum 3 prescriptions allowed'),
-          backgroundColor: Colors.red.shade400,
-          behavior: SnackBarBehavior.floating,
-          shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(10),
-          ),
-        ),
+        const SnackBar(content: Text('Maximum 3 prescriptions allowed')),
       );
       return;
     }
-    setState(() {
-      _uploadedImages.add(
-        'Prescription ${_uploadedImages.length + 1} ($source)',
+
+    try {
+      final result = await FilePicker.platform.pickFiles(
+        type: FileType.image,
+        allowMultiple: true,
+        withData: true, // Important for Web!
       );
-    });
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(
-        content: Text('Image ${_uploadedImages.length} added from $source'),
-        backgroundColor: Colors.teal.shade600,
-        behavior: SnackBarBehavior.floating,
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
-      ),
-    );
+
+      if (result != null) {
+        setState(() {
+          // Add files, but don't exceed max limit
+          int availableSlots = _maxImages - _selectedFiles.length;
+          _selectedFiles.addAll(result.files.take(availableSlots));
+        });
+      }
+    } catch (e) {
+      debugPrint('Error picking file: $e');
+    }
   }
 
   void _removeImage(int index) {
     setState(() {
-      _uploadedImages.removeAt(index);
+      _selectedFiles.removeAt(index);
     });
   }
 
-  void _submitOrder() {
+  // 2. The Submission Logic
+  void _initiateSubmit() async {
+    // A. First, ask for Delivery Address
+    final selectedAddress = await Navigator.push(
+      context,
+      MaterialPageRoute(
+        builder: (_) => const SavedAddressesScreen(selectMode: true),
+      ),
+    );
+
+    // If user cancelled address selection, stop.
+    if (selectedAddress == null) return;
+
+    // B. Start Upload Process
+    _processUpload(selectedAddress['id']);
+  }
+
+  void _processUpload(String addressId) async {
+    setState(() => _isUploading = true);
+
+    try {
+      final userId = supabase.auth.currentUser!.id;
+
+      // 1. Create the Order in DB first
+      final orderResponse = await supabase
+          .from('orders')
+          .insert({
+            'user_id': userId,
+            'pharmacy_name': _selectedPharmacy,
+            'pharmacy_address': _selectedPharmacy == 'Any Pharmacy'
+                ? 'Auto-assigned'
+                : 'Specific selection',
+            'status': 'pending_review',
+            'notes': _notesController.text.trim(),
+            'delivery_address_id': addressId,
+            'total_price': 0.00, // Price set later by pharmacist
+          })
+          .select()
+          .single();
+
+      final orderId = orderResponse['id'];
+
+      // 2. Upload Images to Storage & Link to Order
+      for (var file in _selectedFiles) {
+        final fileExt = file.extension ?? 'jpg';
+        final fileName =
+            '${DateTime.now().millisecondsSinceEpoch}_${file.name}';
+        final filePath = '$userId/$fileName';
+
+        // Upload bits (works on Web & Mobile)
+        await supabase.storage
+            .from('prescriptions')
+            .uploadBinary(filePath, file.bytes!);
+
+        // Get Public URL (or just save path)
+        // For security, we usually just save the path and generate signed URLs later
+        // But for this demo, we'll save the path.
+
+        // 3. Save Image Record in DB
+        await supabase.from('prescription_images').insert({
+          'order_id': orderId,
+          'image_url': filePath, // Storing the storage path
+          'file_name': file.name,
+        });
+      }
+
+      // 4. Create Initial Status History
+      await supabase.from('order_status_history').insert({
+        'order_id': orderId,
+        'status': 'pending_review',
+        'changed_by': userId,
+        'note': 'Order created',
+      });
+
+      if (!mounted) return;
+      _showSuccessDialog();
+    } catch (e) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('Upload failed: $e'),
+          backgroundColor: Colors.red,
+        ),
+      );
+    } finally {
+      if (mounted) setState(() => _isUploading = false);
+    }
+  }
+
+  void _showSuccessDialog() {
     final bool isDark = Theme.of(context).brightness == Brightness.dark;
-    final Color dialogTextColor = isDark
-        ? Colors.white
-        : const Color(0xFF1A1A1A);
+    final Color dialogBg = isDark ? const Color(0xFF1E1E1E) : Colors.white;
+    final Color dialogText = isDark ? Colors.white : const Color(0xFF1A1A1A);
 
     showDialog(
       context: context,
+      barrierDismissible: false,
       builder: (context) => Dialog(
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
-        backgroundColor: isDark ? const Color(0xFF1E1E1E) : Colors.white,
+        backgroundColor: dialogBg,
         child: Padding(
           padding: const EdgeInsets.all(28),
           child: Column(
@@ -114,14 +203,12 @@ class _UploadPrescriptionScreenState extends State<UploadPrescriptionScreen> {
                 style: TextStyle(
                   fontSize: 20,
                   fontWeight: FontWeight.w700,
-                  color: dialogTextColor,
+                  color: dialogText,
                 ),
               ),
               const SizedBox(height: 8),
               Text(
-                _selectedPharmacy == 'Any Pharmacy'
-                    ? '${_uploadedImages.length} prescription(s) sent to\nthe nearest available pharmacy.'
-                    : '${_uploadedImages.length} prescription(s) sent to\n$_selectedPharmacy for review.',
+                'We have received your prescription. You will be notified when the price is ready.',
                 textAlign: TextAlign.center,
                 style: TextStyle(
                   fontSize: 14,
@@ -135,8 +222,8 @@ class _UploadPrescriptionScreenState extends State<UploadPrescriptionScreen> {
                 height: 48,
                 child: ElevatedButton(
                   onPressed: () {
-                    Navigator.pop(context);
-                    Navigator.pop(context);
+                    Navigator.pop(context); // Close dialog
+                    Navigator.pop(context); // Go back to Home
                   },
                   style: ElevatedButton.styleFrom(
                     backgroundColor: Colors.teal.shade600,
@@ -233,13 +320,15 @@ class _UploadPrescriptionScreenState extends State<UploadPrescriptionScreen> {
               style: TextStyle(fontSize: 13, color: subtextColor),
             ),
             const SizedBox(height: 12),
-            if (_uploadedImages.isNotEmpty) ...[
-              ..._uploadedImages.asMap().entries.map(
+
+            if (_selectedFiles.isNotEmpty) ...[
+              ..._selectedFiles.asMap().entries.map(
                 (entry) => _buildImageCard(entry.key, entry.value, isDark),
               ),
               const SizedBox(height: 8),
             ],
-            if (_uploadedImages.length < _maxImages)
+
+            if (_selectedFiles.length < _maxImages)
               _buildImagePicker(
                 isDark,
                 borderColor,
@@ -247,11 +336,12 @@ class _UploadPrescriptionScreenState extends State<UploadPrescriptionScreen> {
                 uploadTextColor,
                 subtextColor,
               ),
-            if (_uploadedImages.isNotEmpty)
+
+            if (_selectedFiles.isNotEmpty)
               Padding(
                 padding: const EdgeInsets.only(top: 8),
                 child: Text(
-                  '${_uploadedImages.length} of $_maxImages uploaded',
+                  '${_selectedFiles.length} of $_maxImages uploaded',
                   style: TextStyle(
                     fontSize: 13,
                     fontWeight: FontWeight.w500,
@@ -259,7 +349,9 @@ class _UploadPrescriptionScreenState extends State<UploadPrescriptionScreen> {
                   ),
                 ),
               ),
+
             const SizedBox(height: 28),
+
             // Step 2: Select Pharmacy
             _buildSectionLabel('2', 'Choose Pharmacy', textColor, isDark),
             const SizedBox(height: 12),
@@ -272,7 +364,9 @@ class _UploadPrescriptionScreenState extends State<UploadPrescriptionScreen> {
                 subtextColor,
               ),
             ),
+
             const SizedBox(height: 28),
+
             // Step 3: Notes
             _buildSectionLabel('3', 'Add Notes (Optional)', textColor, isDark),
             const SizedBox(height: 12),
@@ -294,13 +388,15 @@ class _UploadPrescriptionScreenState extends State<UploadPrescriptionScreen> {
                 ),
               ),
             ),
+
             const SizedBox(height: 32),
+
             // Submit button
             SizedBox(
               width: double.infinity,
               height: 56,
               child: ElevatedButton(
-                onPressed: _canSubmit ? _submitOrder : null,
+                onPressed: _canSubmit ? _initiateSubmit : null,
                 style: ElevatedButton.styleFrom(
                   backgroundColor: Colors.teal.shade600,
                   disabledBackgroundColor: isDark
@@ -313,12 +409,25 @@ class _UploadPrescriptionScreenState extends State<UploadPrescriptionScreen> {
                     borderRadius: BorderRadius.circular(14),
                   ),
                 ),
-                child: const Text(
-                  'Submit Prescription',
-                  style: TextStyle(fontSize: 17, fontWeight: FontWeight.w600),
-                ),
+                child: _isUploading
+                    ? const SizedBox(
+                        width: 24,
+                        height: 24,
+                        child: CircularProgressIndicator(
+                          color: Colors.white,
+                          strokeWidth: 2.5,
+                        ),
+                      )
+                    : const Text(
+                        'Next: Choose Address',
+                        style: TextStyle(
+                          fontSize: 17,
+                          fontWeight: FontWeight.w600,
+                        ),
+                      ),
               ),
             ),
+
             const SizedBox(height: 16),
             Center(
               child: Row(
@@ -390,89 +499,37 @@ class _UploadPrescriptionScreenState extends State<UploadPrescriptionScreen> {
     Color textColor,
     Color subtextColor,
   ) {
-    return Container(
-      width: double.infinity,
-      padding: const EdgeInsets.all(24),
-      decoration: BoxDecoration(
-        border: Border.all(
-          color: borderColor,
-          width: 1.5,
-          strokeAlign: BorderSide.strokeAlignInside,
-        ),
-        borderRadius: BorderRadius.circular(16),
-      ),
-      child: Column(
-        children: [
-          Icon(Icons.cloud_upload_outlined, size: 48, color: iconColor),
-          const SizedBox(height: 12),
-          Text(
-            _uploadedImages.isEmpty
-                ? 'Upload your prescription'
-                : 'Add another prescription',
-            style: TextStyle(
-              fontSize: 15,
-              fontWeight: FontWeight.w500,
-              color: textColor,
-            ),
-          ),
-          const SizedBox(height: 4),
-          Text(
-            'JPG, PNG or PDF supported',
-            style: TextStyle(fontSize: 13, color: subtextColor),
-          ),
-          const SizedBox(height: 20),
-          Row(
-            children: [
-              Expanded(
-                child: _buildPickerButton(
-                  icon: Icons.camera_alt_rounded,
-                  label: 'Camera',
-                  onTap: () => _pickImage('Camera'),
-                  isDark: isDark,
-                ),
-              ),
-              const SizedBox(width: 12),
-              Expanded(
-                child: _buildPickerButton(
-                  icon: Icons.photo_library_rounded,
-                  label: 'Gallery',
-                  onTap: () => _pickImage('Gallery'),
-                  isDark: isDark,
-                ),
-              ),
-            ],
-          ),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildPickerButton({
-    required IconData icon,
-    required String label,
-    required VoidCallback onTap,
-    required bool isDark,
-  }) {
     return GestureDetector(
-      onTap: onTap,
+      onTap: _pickImage,
       child: Container(
-        padding: const EdgeInsets.symmetric(vertical: 14),
+        width: double.infinity,
+        padding: const EdgeInsets.all(24),
         decoration: BoxDecoration(
-          color: isDark ? Colors.teal.shade900 : Colors.teal.shade50,
-          borderRadius: BorderRadius.circular(12),
+          border: Border.all(
+            color: borderColor,
+            width: 1.5,
+            strokeAlign: BorderSide.strokeAlignInside,
+          ),
+          borderRadius: BorderRadius.circular(16),
         ),
-        child: Row(
-          mainAxisAlignment: MainAxisAlignment.center,
+        child: Column(
           children: [
-            Icon(icon, size: 20, color: Colors.teal.shade700),
-            const SizedBox(width: 8),
+            Icon(Icons.cloud_upload_outlined, size: 48, color: iconColor),
+            const SizedBox(height: 12),
             Text(
-              label,
+              _selectedFiles.isEmpty
+                  ? 'Upload your prescription'
+                  : 'Add another prescription',
               style: TextStyle(
-                fontSize: 14,
-                fontWeight: FontWeight.w600,
-                color: Colors.teal.shade700,
+                fontSize: 15,
+                fontWeight: FontWeight.w500,
+                color: textColor,
               ),
+            ),
+            const SizedBox(height: 4),
+            Text(
+              'Tap to select files',
+              style: TextStyle(fontSize: 13, color: subtextColor),
             ),
           ],
         ),
@@ -480,7 +537,7 @@ class _UploadPrescriptionScreenState extends State<UploadPrescriptionScreen> {
     );
   }
 
-  Widget _buildImageCard(int index, String imageName, bool isDark) {
+  Widget _buildImageCard(int index, PlatformFile file, bool isDark) {
     return Container(
       width: double.infinity,
       margin: const EdgeInsets.only(bottom: 8),
@@ -516,7 +573,9 @@ class _UploadPrescriptionScreenState extends State<UploadPrescriptionScreen> {
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Text(
-                  imageName,
+                  file.name,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
                   style: TextStyle(
                     fontSize: 14,
                     fontWeight: FontWeight.w600,
@@ -525,7 +584,7 @@ class _UploadPrescriptionScreenState extends State<UploadPrescriptionScreen> {
                 ),
                 const SizedBox(height: 2),
                 Text(
-                  'Tap × to remove',
+                  '${(file.size / 1024).toStringAsFixed(1)} KB',
                   style: TextStyle(
                     fontSize: 12,
                     color: isDark ? Colors.teal.shade400 : Colors.teal.shade500,

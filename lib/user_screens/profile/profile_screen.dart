@@ -4,6 +4,7 @@ import '../../services/preferences_service.dart';
 import 'settings_screen.dart';
 import 'edit_profile_screen.dart';
 import '../../screens/splash_screen.dart';
+import '../address/saved_addresses_screen.dart';
 
 class ProfileScreen extends StatefulWidget {
   const ProfileScreen({super.key});
@@ -405,6 +406,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
                 _loadProfile();
               },
             ),
+
             _buildMenuItem(
               icon: Icons.location_on_outlined,
               title: 'Saved Addresses',
@@ -414,18 +416,15 @@ class _ProfileScreenState extends State<ProfileScreen> {
               textColor: textColor,
               subtextColor: subtextColor,
               onTap: () {
-                ScaffoldMessenger.of(context).showSnackBar(
-                  SnackBar(
-                    content: const Text('Addresses coming soon'),
-                    backgroundColor: Colors.teal.shade600,
-                    behavior: SnackBarBehavior.floating,
-                    shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(10),
-                    ),
+                Navigator.push(
+                  context,
+                  MaterialPageRoute(
+                    builder: (_) => const SavedAddressesScreen(),
                   ),
                 );
               },
             ),
+
             _buildMenuItem(
               icon: Icons.settings_rounded,
               title: 'App Settings',
