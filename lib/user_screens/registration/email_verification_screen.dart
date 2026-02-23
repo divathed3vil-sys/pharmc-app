@@ -19,7 +19,7 @@ class _EmailVerificationScreenState extends State<EmailVerificationScreen> {
   bool _isChecking = false;
 
   Future<void> _resend() async {
-    final result = await AuthService.resendVerificationEmail(widget.email);
+    final result = await AuthService.resendOTP(widget.email);
 
     if (!mounted) return;
     ScaffoldMessenger.of(context).showSnackBar(

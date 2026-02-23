@@ -1,6 +1,5 @@
 import 'package:flutter/material.dart';
 import '../constants.dart';
-import '../services/preferences_service.dart';
 import 'role_selection_screen.dart';
 import '../user_screens/home_screen.dart';
 import '../services/auth_service.dart';

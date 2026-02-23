@@ -26,7 +26,6 @@ class AuthService {
         );
       }
 
-      // Cache locally
       await _cacheUserLocally(
         name: fullName,
         phone: phone,
@@ -36,7 +35,7 @@ class AuthService {
 
       return AuthResult(
         success: true,
-        message: 'Account created! Please verify your email.',
+        message: 'Verification code sent to your email!',
         needsVerification: true,
       );
     } on AuthException catch (e) {
@@ -45,6 +44,51 @@ class AuthService {
       return AuthResult(
         success: false,
         message: 'Something went wrong. Please try again.',
+      );
+    }
+  }
+
+  // ============ VERIFY OTP ============
+  static Future<AuthResult> verifyOTP({
+    required String email,
+    required String otp,
+  }) async {
+    try {
+      final response = await _client.auth.verifyOTP(
+        email: email,
+        token: otp,
+        type: OtpType.signup,
+      );
+
+      if (response.user == null) {
+        return AuthResult(
+          success: false,
+          message: 'Invalid code. Please try again.',
+        );
+      }
+
+      await syncProfileToLocal();
+
+      return AuthResult(success: true, message: 'Email verified!');
+    } on AuthException catch (e) {
+      return AuthResult(success: false, message: _parseAuthError(e.message));
+    } catch (e) {
+      return AuthResult(
+        success: false,
+        message: 'Verification failed. Please try again.',
+      );
+    }
+  }
+
+  // ============ RESEND OTP ============
+  static Future<AuthResult> resendOTP(String email) async {
+    try {
+      await _client.auth.resend(type: OtpType.signup, email: email);
+      return AuthResult(success: true, message: 'New code sent!');
+    } catch (e) {
+      return AuthResult(
+        success: false,
+        message: 'Failed to resend. Please wait a moment.',
       );
     }
   }
@@ -75,7 +119,6 @@ class AuthService {
         );
       }
 
-      // Sync profile to local
       await syncProfileToLocal();
 
       return AuthResult(success: true, message: 'Welcome back!');
@@ -109,19 +152,6 @@ class AuthService {
       return AuthResult(success: true, message: 'Account deleted.');
     } catch (e) {
       return AuthResult(success: false, message: 'Failed to delete account.');
-    }
-  }
-
-  // ============ RESEND VERIFICATION ============
-  static Future<AuthResult> resendVerificationEmail(String email) async {
-    try {
-      await _client.auth.resend(type: OtpType.signup, email: email);
-      return AuthResult(success: true, message: 'Verification email sent!');
-    } catch (e) {
-      return AuthResult(
-        success: false,
-        message: 'Failed to send email. Try again.',
-      );
     }
   }
 
