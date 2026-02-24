@@ -55,11 +55,7 @@ class _CreateAccountScreenState extends State<CreateAccountScreen>
     _animController.forward();
   }
 
-  void _onChanged() {
-    setState(() {
-      _errorMessage = null;
-    });
-  }
+  void _onChanged() => setState(() => _errorMessage = null);
 
   @override
   void dispose() {
@@ -76,15 +72,14 @@ class _CreateAccountScreenState extends State<CreateAccountScreen>
   }
 
   void _createAccount() async {
-    // Dismiss keyboard
     FocusScope.of(context).unfocus();
-
     setState(() {
       _isLoading = true;
       _errorMessage = null;
     });
 
-    final role = PreferencesService.getUserRole() ?? 'customer';
+    // Role is always 'customer' now — separate apps for other roles
+    const role = 'customer';
     final email = _emailController.text.trim();
 
     final result = await AuthService.signUp(
@@ -96,22 +91,24 @@ class _CreateAccountScreenState extends State<CreateAccountScreen>
     );
 
     if (!mounted) return;
-
-    setState(() {
-      _isLoading = false;
-    });
+    setState(() => _isLoading = false);
 
     if (result.success) {
-      Navigator.pushReplacement(
+      // Cache name locally right away so it shows immediately after verify
+      await PreferencesService.setUserName(_nameController.text.trim());
+      await PreferencesService.setUserPhone(_phoneController.text.trim());
+      await PreferencesService.setUserEmail(email);
+      await PreferencesService.setUserRole(role);
+
+      if (!mounted) return;
+      Navigator.push(
         context,
         MaterialPageRoute(
           builder: (_) => EmailVerificationScreen(email: email),
         ),
       );
     } else {
-      setState(() {
-        _errorMessage = result.message;
-      });
+      setState(() => _errorMessage = result.message);
     }
   }
 
@@ -121,26 +118,14 @@ class _CreateAccountScreenState extends State<CreateAccountScreen>
     final textColor = isDark ? Colors.white : const Color(0xFF1A1A1A);
     final subtextColor = isDark ? Colors.grey.shade400 : Colors.grey.shade500;
     final inputBg = isDark ? const Color(0xFF1E1E1E) : const Color(0xFFF5F5F5);
-    final backBg = isDark ? const Color(0xFF2A2A2A) : const Color(0xFFF5F5F5);
     final hintColor = isDark ? Colors.grey.shade600 : Colors.grey.shade400;
     final iconColor = isDark ? Colors.grey.shade400 : Colors.grey.shade500;
     final dividerColor = isDark ? Colors.grey.shade800 : Colors.grey.shade300;
 
     return Scaffold(
       backgroundColor: Theme.of(context).scaffoldBackgroundColor,
-      appBar: AppBar(
-        leading: GestureDetector(
-          onTap: () => Navigator.pop(context),
-          child: Container(
-            margin: const EdgeInsets.all(8),
-            decoration: BoxDecoration(
-              color: backBg,
-              borderRadius: BorderRadius.circular(12),
-            ),
-            child: Icon(Icons.arrow_back_rounded, color: textColor, size: 20),
-          ),
-        ),
-      ),
+      // ── No back arrow — login link below handles going back ──
+      appBar: AppBar(automaticallyImplyLeading: false),
       body: FadeTransition(
         opacity: _fadeIn,
         child: SafeArea(
@@ -152,7 +137,6 @@ class _CreateAccountScreenState extends State<CreateAccountScreen>
               children: [
                 const SizedBox(height: 8),
 
-                // Header
                 Text(
                   AppConstants.appName,
                   style: TextStyle(
@@ -180,7 +164,7 @@ class _CreateAccountScreenState extends State<CreateAccountScreen>
                 ),
                 const SizedBox(height: 28),
 
-                // Social buttons (greyed out for now)
+                // Social buttons (greyed out / coming soon)
                 _buildSocialButton(
                   icon: 'G',
                   label: 'Continue with Google',
@@ -258,39 +242,16 @@ class _CreateAccountScreenState extends State<CreateAccountScreen>
                         fontWeight: FontWeight.w400,
                         letterSpacing: 1.0,
                       ),
-                      prefixIcon: Padding(
-                        padding: const EdgeInsets.only(left: 14, right: 8),
-                        child: Row(
-                          mainAxisSize: MainAxisSize.min,
-                          children: [
-                            Icon(
-                              Icons.phone_outlined,
-                              color: iconColor,
-                              size: 20,
-                            ),
-                            const SizedBox(width: 10),
-                            Text(
-                              '+94',
-                              style: TextStyle(
-                                fontSize: 16,
-                                fontWeight: FontWeight.w500,
-                                color: isDark
-                                    ? Colors.grey.shade400
-                                    : Colors.grey.shade600,
-                              ),
-                            ),
-                            const SizedBox(width: 8),
-                            Container(
-                              width: 1,
-                              height: 20,
-                              color: dividerColor,
-                            ),
-                          ],
-                        ),
+                      prefixIcon: Icon(
+                        Icons.phone_outlined,
+                        color: iconColor,
+                        size: 20,
                       ),
-                      prefixIconConstraints: const BoxConstraints(
-                        minWidth: 0,
-                        minHeight: 0,
+                      prefixText: '+94  ',
+                      prefixStyle: TextStyle(
+                        color: textColor,
+                        fontSize: 16,
+                        fontWeight: FontWeight.w500,
                       ),
                       border: InputBorder.none,
                       contentPadding: const EdgeInsets.symmetric(
@@ -328,6 +289,9 @@ class _CreateAccountScreenState extends State<CreateAccountScreen>
                     focusNode: _passwordFocus,
                     obscureText: _obscurePassword,
                     enabled: !_isLoading,
+                    onSubmitted: (_) {
+                      if (_canSubmit) _createAccount();
+                    },
                     style: TextStyle(
                       fontSize: 16,
                       fontWeight: FontWeight.w500,
@@ -345,11 +309,9 @@ class _CreateAccountScreenState extends State<CreateAccountScreen>
                         size: 20,
                       ),
                       suffixIcon: GestureDetector(
-                        onTap: () {
-                          setState(() {
-                            _obscurePassword = !_obscurePassword;
-                          });
-                        },
+                        onTap: () => setState(
+                          () => _obscurePassword = !_obscurePassword,
+                        ),
                         child: Icon(
                           _obscurePassword
                               ? Icons.visibility_off_outlined
@@ -367,7 +329,7 @@ class _CreateAccountScreenState extends State<CreateAccountScreen>
                   ),
                 ),
 
-                // Error message
+                // Error
                 if (_errorMessage != null) ...[
                   const SizedBox(height: 16),
                   Container(
@@ -448,19 +410,17 @@ class _CreateAccountScreenState extends State<CreateAccountScreen>
                 ),
                 const SizedBox(height: 16),
 
-                // Sign in link
+                // Sign in link — uses pushReplacement so back doesn't loop
                 Center(
                   child: GestureDetector(
                     onTap: _isLoading
                         ? null
-                        : () {
-                            Navigator.push(
-                              context,
-                              MaterialPageRoute(
-                                builder: (_) => const LoginScreen(),
-                              ),
-                            );
-                          },
+                        : () => Navigator.pushReplacement(
+                            context,
+                            MaterialPageRoute(
+                              builder: (_) => const LoginScreen(),
+                            ),
+                          ),
                     child: RichText(
                       text: TextSpan(
                         text: 'Already have an account? ',
@@ -513,9 +473,7 @@ class _CreateAccountScreenState extends State<CreateAccountScreen>
         textCapitalization: textCapitalization,
         enabled: !_isLoading,
         onSubmitted: (_) {
-          if (nextFocus != null) {
-            FocusScope.of(context).requestFocus(nextFocus);
-          }
+          if (nextFocus != null) FocusScope.of(context).requestFocus(nextFocus);
         },
         style: TextStyle(
           fontSize: 16,
@@ -544,34 +502,28 @@ class _CreateAccountScreenState extends State<CreateAccountScreen>
   }) {
     final bgColor = isDark ? const Color(0xFF1E1E1E) : const Color(0xFFF5F5F5);
     final borderColor = isDark ? Colors.grey.shade800 : Colors.grey.shade300;
-    final labelColor = isDark ? Colors.grey.shade500 : Colors.grey.shade500;
+    final labelColor = Colors.grey.shade500;
 
     return Opacity(
-      opacity: enabled ? 1.0 : 0.5,
+      opacity: 0.5,
       child: GestureDetector(
-        onTap: enabled
-            ? () {
-                // TODO: implement social sign in
-              }
-            : () {
-                ScaffoldMessenger.of(context).showSnackBar(
-                  SnackBar(
-                    content: const Text('Coming soon!'),
-                    backgroundColor: Colors.teal.shade600,
-                    behavior: SnackBarBehavior.floating,
-                    shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(10),
-                    ),
-                  ),
-                );
-              },
+        onTap: () => ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: const Text('Coming soon!'),
+            backgroundColor: Colors.teal.shade600,
+            behavior: SnackBarBehavior.floating,
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(10),
+            ),
+          ),
+        ),
         child: Container(
           width: double.infinity,
           height: 52,
           decoration: BoxDecoration(
             color: bgColor,
             borderRadius: BorderRadius.circular(14),
-            border: Border.all(color: borderColor, width: 1),
+            border: Border.all(color: borderColor),
           ),
           child: Row(
             mainAxisAlignment: MainAxisAlignment.center,
@@ -596,29 +548,22 @@ class _CreateAccountScreenState extends State<CreateAccountScreen>
                   color: labelColor,
                 ),
               ),
-              if (!enabled) ...[
-                const SizedBox(width: 8),
-                Container(
-                  padding: const EdgeInsets.symmetric(
-                    horizontal: 8,
-                    vertical: 2,
-                  ),
-                  decoration: BoxDecoration(
-                    color: isDark ? Colors.grey.shade800 : Colors.grey.shade200,
-                    borderRadius: BorderRadius.circular(6),
-                  ),
-                  child: Text(
-                    'Soon',
-                    style: TextStyle(
-                      fontSize: 11,
-                      fontWeight: FontWeight.w600,
-                      color: isDark
-                          ? Colors.grey.shade500
-                          : Colors.grey.shade500,
-                    ),
+              const SizedBox(width: 8),
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+                decoration: BoxDecoration(
+                  color: isDark ? Colors.grey.shade800 : Colors.grey.shade200,
+                  borderRadius: BorderRadius.circular(6),
+                ),
+                child: Text(
+                  'Soon',
+                  style: TextStyle(
+                    fontSize: 11,
+                    fontWeight: FontWeight.w600,
+                    color: Colors.grey.shade500,
                   ),
                 ),
-              ],
+              ),
             ],
           ),
         ),

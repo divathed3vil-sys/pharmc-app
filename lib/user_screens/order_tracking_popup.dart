@@ -1,6 +1,7 @@
 import 'dart:ui';
 import 'package:flutter/material.dart';
 import '../main.dart';
+import 'payment_screen.dart';
 
 class OrderTrackingPopup extends StatefulWidget {
   final Map<String, dynamic> order;
@@ -606,7 +607,15 @@ class _OrderTrackingPopupState extends State<OrderTrackingPopup> {
                   child: SizedBox(
                     height: 48,
                     child: ElevatedButton.icon(
-                      onPressed: () => Navigator.pop(context),
+                      onPressed: () {
+                        Navigator.pop(context);
+                        Navigator.push(
+                          context,
+                          MaterialPageRoute(
+                            builder: (_) => const PaymentScreen(),
+                          ),
+                        );
+                      },
                       icon: const Icon(Icons.receipt_long_rounded, size: 18),
                       label: const Text(
                         'Payment',
@@ -653,265 +662,253 @@ class _OrderTrackingPopupState extends State<OrderTrackingPopup> {
     final subtextColor = isDark ? Colors.grey.shade400 : Colors.grey.shade500;
     final notes = widget.order['notes'] ?? '';
 
-    return GestureDetector(
-      onHorizontalDragEnd: (d) {
-        if ((d.primaryVelocity ?? 0) > 300) _switchToTracking();
-      },
-      child: Padding(
-        padding: const EdgeInsets.all(24),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            // ── Top bar ──────────────────────────────────────────────────
-            Row(
-              children: [
-                GestureDetector(
-                  onTap: _switchToTracking,
-                  child: Container(
-                    width: 36,
-                    height: 36,
-                    decoration: BoxDecoration(
-                      color: isDark
-                          ? Colors.grey.shade800
-                          : Colors.grey.shade200,
-                      borderRadius: BorderRadius.circular(10),
-                    ),
-                    child: Icon(
-                      Icons.arrow_back_rounded,
-                      size: 20,
-                      color: textColor,
-                    ),
+    return Padding(
+      padding: const EdgeInsets.all(24),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          // ── Top bar ──────────────────────────────────────────────────
+          Row(
+            children: [
+              GestureDetector(
+                onTap: _switchToTracking,
+                child: Container(
+                  width: 36,
+                  height: 36,
+                  decoration: BoxDecoration(
+                    color: isDark ? Colors.grey.shade800 : Colors.grey.shade200,
+                    borderRadius: BorderRadius.circular(10),
                   ),
-                ),
-                const SizedBox(width: 12),
-                Text(
-                  'Prescriptions',
-                  style: TextStyle(
-                    fontSize: 18,
-                    fontWeight: FontWeight.w700,
+                  child: Icon(
+                    Icons.arrow_back_rounded,
+                    size: 20,
                     color: textColor,
                   ),
                 ),
-                const Spacer(),
-                GestureDetector(
-                  onTap: () => Navigator.pop(context),
-                  child: Container(
-                    width: 32,
-                    height: 32,
-                    decoration: BoxDecoration(
-                      color: isDark
-                          ? Colors.grey.shade800
-                          : Colors.grey.shade200,
-                      shape: BoxShape.circle,
-                    ),
-                    child: Icon(
-                      Icons.close_rounded,
-                      size: 18,
-                      color: isDark
-                          ? Colors.grey.shade400
-                          : Colors.grey.shade600,
-                    ),
+              ),
+              const SizedBox(width: 12),
+              Text(
+                'Prescriptions',
+                style: TextStyle(
+                  fontSize: 18,
+                  fontWeight: FontWeight.w700,
+                  color: textColor,
+                ),
+              ),
+              const Spacer(),
+              GestureDetector(
+                onTap: () => Navigator.pop(context),
+                child: Container(
+                  width: 32,
+                  height: 32,
+                  decoration: BoxDecoration(
+                    color: isDark ? Colors.grey.shade800 : Colors.grey.shade200,
+                    shape: BoxShape.circle,
+                  ),
+                  child: Icon(
+                    Icons.close_rounded,
+                    size: 18,
+                    color: isDark ? Colors.grey.shade400 : Colors.grey.shade600,
                   ),
                 ),
-              ],
-            ),
+              ),
+            ],
+          ),
 
-            const SizedBox(height: 20),
+          const SizedBox(height: 20),
 
-            // ── Images ───────────────────────────────────────────────────
-            if (_loadingImages)
-              const Expanded(child: Center(child: CircularProgressIndicator()))
-            else if (_prescriptionImages.isEmpty)
-              Expanded(
-                child: Center(
-                  child: Column(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      Icon(
-                        Icons.image_not_supported_rounded,
-                        size: 48,
-                        color: Colors.grey.shade400,
-                      ),
-                      const SizedBox(height: 12),
-                      Text(
-                        'No prescriptions found',
-                        style: TextStyle(color: subtextColor),
-                      ),
-                    ],
-                  ),
-                ),
-              )
-            else ...[
-              // Image viewer — expands to fill remaining space
-              Expanded(
-                child: Stack(
+          // ── Images ───────────────────────────────────────────────────
+          if (_loadingImages)
+            const Expanded(child: Center(child: CircularProgressIndicator()))
+          else if (_prescriptionImages.isEmpty)
+            Expanded(
+              child: Center(
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
                   children: [
-                    // Image PageView (swipe between multiple images)
-                    PageView.builder(
-                      controller: _imagePageController,
-                      itemCount: _prescriptionImages.length,
-                      onPageChanged: (i) =>
-                          setState(() => _currentImagePage = i),
-                      itemBuilder: (context, index) {
-                        final imagePath =
-                            _prescriptionImages[index]['image_url'] as String;
-                        final zoomCtrl = _zoomFor(index);
-
-                        return Container(
-                          margin: const EdgeInsets.symmetric(horizontal: 4),
-                          decoration: BoxDecoration(
-                            color: isDark
-                                ? Colors.grey.shade800
-                                : Colors.grey.shade100,
-                            borderRadius: BorderRadius.circular(16),
-                          ),
-                          child: ClipRRect(
-                            borderRadius: BorderRadius.circular(16),
-                            child: InteractiveViewer(
-                              transformationController: zoomCtrl,
-                              minScale: 1.0,
-                              maxScale: 4.0,
-                              child: FutureBuilder<String>(
-                                future: _getSignedUrl(imagePath),
-                                builder: (context, snapshot) {
-                                  if (!snapshot.hasData) {
-                                    return const Center(
-                                      child: CircularProgressIndicator(),
-                                    );
-                                  }
-                                  return Image.network(
-                                    snapshot.data!,
-                                    fit: BoxFit.contain,
-                                    errorBuilder: (_, __, ___) => Icon(
-                                      Icons.broken_image_rounded,
-                                      size: 48,
-                                      color: Colors.grey.shade400,
-                                    ),
-                                  );
-                                },
-                              ),
-                            ),
-                          ),
-                        );
-                      },
+                    Icon(
+                      Icons.image_not_supported_rounded,
+                      size: 48,
+                      color: Colors.grey.shade400,
                     ),
-
-                    // Image counter badge (top-right)
-                    if (_prescriptionImages.length > 1)
-                      Positioned(
-                        top: 10,
-                        right: 14,
-                        child: Container(
-                          padding: const EdgeInsets.symmetric(
-                            horizontal: 10,
-                            vertical: 5,
-                          ),
-                          decoration: BoxDecoration(
-                            color: Colors.black.withOpacity(0.6),
-                            borderRadius: BorderRadius.circular(8),
-                          ),
-                          child: Text(
-                            '${_currentImagePage + 1} / ${_prescriptionImages.length}',
-                            style: const TextStyle(
-                              fontSize: 12,
-                              color: Colors.white,
-                              fontWeight: FontWeight.w600,
-                            ),
-                          ),
-                        ),
-                      ),
-
-                    // ── Zoom buttons (bottom-right) ───────────────────────
-                    Positioned(
-                      bottom: 12,
-                      right: 14,
-                      child: Column(
-                        mainAxisSize: MainAxisSize.min,
-                        children: [
-                          _buildZoomButton(
-                            icon: Icons.add_rounded,
-                            onTap: () =>
-                                setState(() => _zoomIn(_currentImagePage)),
-                            isDark: isDark,
-                          ),
-                          const SizedBox(height: 6),
-                          _buildZoomButton(
-                            icon: Icons.remove_rounded,
-                            onTap: () =>
-                                setState(() => _zoomOut(_currentImagePage)),
-                            isDark: isDark,
-                          ),
-                        ],
-                      ),
+                    const SizedBox(height: 12),
+                    Text(
+                      'No prescriptions found',
+                      style: TextStyle(color: subtextColor),
                     ),
                   ],
                 ),
               ),
+            )
+          else ...[
+            // Image viewer — expands to fill remaining space
+            Expanded(
+              child: Stack(
+                children: [
+                  // Image PageView (swipe between multiple images)
+                  PageView.builder(
+                    controller: _imagePageController,
+                    itemCount: _prescriptionImages.length,
+                    onPageChanged: (i) => setState(() => _currentImagePage = i),
+                    itemBuilder: (context, index) {
+                      final imagePath =
+                          _prescriptionImages[index]['image_url'] as String;
+                      final zoomCtrl = _zoomFor(index);
 
-              // Page dots
-              if (_prescriptionImages.length > 1) ...[
-                const SizedBox(height: 12),
-                Row(
-                  mainAxisAlignment: MainAxisAlignment.center,
-                  children: List.generate(_prescriptionImages.length, (i) {
-                    final isActive = i == _currentImagePage;
-                    return AnimatedContainer(
-                      duration: const Duration(milliseconds: 200),
-                      width: isActive ? 18 : 8,
-                      height: 8,
-                      margin: const EdgeInsets.symmetric(horizontal: 3),
-                      decoration: BoxDecoration(
-                        borderRadius: BorderRadius.circular(4),
-                        color: isActive
-                            ? Colors.teal.shade600
-                            : Colors.teal.shade600.withOpacity(0.25),
+                      return Container(
+                        margin: const EdgeInsets.symmetric(horizontal: 4),
+                        decoration: BoxDecoration(
+                          color: isDark
+                              ? Colors.grey.shade800
+                              : Colors.grey.shade100,
+                          borderRadius: BorderRadius.circular(16),
+                        ),
+                        child: ClipRRect(
+                          borderRadius: BorderRadius.circular(16),
+                          child: InteractiveViewer(
+                            transformationController: zoomCtrl,
+                            minScale: 1.0,
+                            maxScale: 4.0,
+                            child: FutureBuilder<String>(
+                              future: _getSignedUrl(imagePath),
+                              builder: (context, snapshot) {
+                                if (!snapshot.hasData) {
+                                  return const Center(
+                                    child: CircularProgressIndicator(),
+                                  );
+                                }
+                                return Image.network(
+                                  snapshot.data!,
+                                  fit: BoxFit.contain,
+                                  errorBuilder: (_, __, ___) => Icon(
+                                    Icons.broken_image_rounded,
+                                    size: 48,
+                                    color: Colors.grey.shade400,
+                                  ),
+                                );
+                              },
+                            ),
+                          ),
+                        ),
+                      );
+                    },
+                  ),
+
+                  // Image counter badge (top-right)
+                  if (_prescriptionImages.length > 1)
+                    Positioned(
+                      top: 10,
+                      right: 14,
+                      child: Container(
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 10,
+                          vertical: 5,
+                        ),
+                        decoration: BoxDecoration(
+                          color: Colors.black.withOpacity(0.6),
+                          borderRadius: BorderRadius.circular(8),
+                        ),
+                        child: Text(
+                          '${_currentImagePage + 1} / ${_prescriptionImages.length}',
+                          style: const TextStyle(
+                            fontSize: 12,
+                            color: Colors.white,
+                            fontWeight: FontWeight.w600,
+                          ),
+                        ),
                       ),
-                    );
-                  }),
-                ),
-              ],
-            ],
+                    ),
 
-            // ── Notes ────────────────────────────────────────────────────
-            if (notes.isNotEmpty) ...[
-              const SizedBox(height: 16),
-              Text(
-                'Notes',
-                style: TextStyle(
-                  fontSize: 14,
-                  fontWeight: FontWeight.w600,
-                  color: subtextColor,
-                ),
+                  // ── Zoom buttons (bottom-right) ───────────────────────
+                  Positioned(
+                    bottom: 12,
+                    right: 14,
+                    child: Column(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        _buildZoomButton(
+                          icon: Icons.add_rounded,
+                          onTap: () =>
+                              setState(() => _zoomIn(_currentImagePage)),
+                          isDark: isDark,
+                        ),
+                        const SizedBox(height: 6),
+                        _buildZoomButton(
+                          icon: Icons.remove_rounded,
+                          onTap: () =>
+                              setState(() => _zoomOut(_currentImagePage)),
+                          isDark: isDark,
+                        ),
+                      ],
+                    ),
+                  ),
+                ],
               ),
-              const SizedBox(height: 8),
-              Container(
-                width: double.infinity,
-                padding: const EdgeInsets.all(14),
-                decoration: BoxDecoration(
-                  color: isDark
-                      ? const Color(0xFF2A2A2A)
-                      : const Color(0xFFF8F9FA),
-                  borderRadius: BorderRadius.circular(12),
-                ),
-                child: Text(
-                  notes,
-                  style: TextStyle(fontSize: 14, color: textColor, height: 1.5),
-                ),
+            ),
+
+            // Page dots
+            if (_prescriptionImages.length > 1) ...[
+              const SizedBox(height: 12),
+              Row(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: List.generate(_prescriptionImages.length, (i) {
+                  final isActive = i == _currentImagePage;
+                  return AnimatedContainer(
+                    duration: const Duration(milliseconds: 200),
+                    width: isActive ? 18 : 8,
+                    height: 8,
+                    margin: const EdgeInsets.symmetric(horizontal: 3),
+                    decoration: BoxDecoration(
+                      borderRadius: BorderRadius.circular(4),
+                      color: isActive
+                          ? Colors.teal.shade600
+                          : Colors.teal.shade600.withOpacity(0.25),
+                    ),
+                  );
+                }),
               ),
             ],
+          ],
 
-            const SizedBox(height: 12),
-            Center(
+          // ── Notes ────────────────────────────────────────────────────
+          if (notes.isNotEmpty) ...[
+            const SizedBox(height: 16),
+            Text(
+              'Notes',
+              style: TextStyle(
+                fontSize: 14,
+                fontWeight: FontWeight.w600,
+                color: subtextColor,
+              ),
+            ),
+            const SizedBox(height: 8),
+            Container(
+              width: double.infinity,
+              padding: const EdgeInsets.all(14),
+              decoration: BoxDecoration(
+                color: isDark
+                    ? const Color(0xFF2A2A2A)
+                    : const Color(0xFFF8F9FA),
+                borderRadius: BorderRadius.circular(12),
+              ),
               child: Text(
-                'Swipe right to go back',
-                style: TextStyle(
-                  fontSize: 11,
-                  color: isDark ? Colors.grey.shade600 : Colors.grey.shade400,
-                ),
+                notes,
+                style: TextStyle(fontSize: 14, color: textColor, height: 1.5),
               ),
             ),
           ],
-        ),
+
+          const SizedBox(height: 12),
+          Center(
+            child: Text(
+              'Swipe right to go back',
+              style: TextStyle(
+                fontSize: 11,
+                color: isDark ? Colors.grey.shade600 : Colors.grey.shade400,
+              ),
+            ),
+          ),
+        ],
       ),
     );
   }

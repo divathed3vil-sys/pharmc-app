@@ -1,8 +1,8 @@
 import 'package:flutter/material.dart';
 import '../../constants.dart';
 import '../../services/auth_service.dart';
-//import '../home_screen.dart';
 import 'email_verification_screen.dart';
+import 'create_account_screen.dart';
 import '../main_navigation.dart';
 
 class LoginScreen extends StatefulWidget {
@@ -28,16 +28,8 @@ class _LoginScreenState extends State<LoginScreen> {
   @override
   void initState() {
     super.initState();
-    _emailController.addListener(
-      () => setState(() {
-        _errorMessage = null;
-      }),
-    );
-    _passwordController.addListener(
-      () => setState(() {
-        _errorMessage = null;
-      }),
-    );
+    _emailController.addListener(() => setState(() => _errorMessage = null));
+    _passwordController.addListener(() => setState(() => _errorMessage = null));
   }
 
   @override
@@ -59,20 +51,15 @@ class _LoginScreenState extends State<LoginScreen> {
     );
 
     if (!mounted) return;
-
-    setState(() {
-      _isLoading = false;
-    });
+    setState(() => _isLoading = false);
 
     if (result.success) {
-      // Go to main navigation screen
       Navigator.pushAndRemoveUntil(
         context,
         MaterialPageRoute(builder: (_) => const MainNavigation()),
         (route) => false,
       );
     } else if (result.needsVerification) {
-      // Go to verification screen
       Navigator.push(
         context,
         MaterialPageRoute(
@@ -81,15 +68,12 @@ class _LoginScreenState extends State<LoginScreen> {
         ),
       );
     } else {
-      setState(() {
-        _errorMessage = result.message;
-      });
+      setState(() => _errorMessage = result.message);
     }
   }
 
   void _forgotPassword() async {
     final email = _emailController.text.trim();
-
     if (!email.contains('@') || !email.contains('.')) {
       setState(() {
         _errorMessage = 'Enter your email above, then tap Forgot Password.';
@@ -103,12 +87,8 @@ class _LoginScreenState extends State<LoginScreen> {
     });
 
     final result = await AuthService.resetPassword(email);
-
     if (!mounted) return;
-
-    setState(() {
-      _isLoading = false;
-    });
+    setState(() => _isLoading = false);
 
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(
@@ -132,9 +112,6 @@ class _LoginScreenState extends State<LoginScreen> {
     final Color inputBg = isDark
         ? const Color(0xFF1E1E1E)
         : const Color(0xFFF5F5F5);
-    final Color backBg = isDark
-        ? const Color(0xFF2A2A2A)
-        : const Color(0xFFF5F5F5);
     final Color hintColor = isDark
         ? Colors.grey.shade600
         : Colors.grey.shade400;
@@ -144,19 +121,8 @@ class _LoginScreenState extends State<LoginScreen> {
 
     return Scaffold(
       backgroundColor: Theme.of(context).scaffoldBackgroundColor,
-      appBar: AppBar(
-        leading: GestureDetector(
-          onTap: () => Navigator.pop(context),
-          child: Container(
-            margin: const EdgeInsets.all(8),
-            decoration: BoxDecoration(
-              color: backBg,
-              borderRadius: BorderRadius.circular(12),
-            ),
-            child: Icon(Icons.arrow_back_rounded, color: textColor, size: 20),
-          ),
-        ),
-      ),
+      // ── No back arrow — this is the entry point of the app ──
+      appBar: AppBar(automaticallyImplyLeading: false),
       body: SafeArea(
         child: Padding(
           padding: const EdgeInsets.symmetric(horizontal: 28.0),
@@ -164,6 +130,7 @@ class _LoginScreenState extends State<LoginScreen> {
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               const SizedBox(height: 32),
+
               Text(
                 AppConstants.appName,
                 style: TextStyle(
@@ -252,11 +219,8 @@ class _LoginScreenState extends State<LoginScreen> {
                       size: 22,
                     ),
                     suffixIcon: GestureDetector(
-                      onTap: () {
-                        setState(() {
-                          _obscurePassword = !_obscurePassword;
-                        });
-                      },
+                      onTap: () =>
+                          setState(() => _obscurePassword = !_obscurePassword),
                       child: Icon(
                         _obscurePassword
                             ? Icons.visibility_off_outlined
@@ -304,7 +268,6 @@ class _LoginScreenState extends State<LoginScreen> {
                     borderRadius: BorderRadius.circular(12),
                     border: Border.all(
                       color: isDark ? Colors.red.shade800 : Colors.red.shade200,
-                      width: 1,
                     ),
                   ),
                   child: Row(
@@ -333,7 +296,7 @@ class _LoginScreenState extends State<LoginScreen> {
 
               const Spacer(),
 
-              // Login button
+              // Log In button
               SizedBox(
                 width: double.infinity,
                 height: 56,
@@ -369,6 +332,39 @@ class _LoginScreenState extends State<LoginScreen> {
                         ),
                 ),
               ),
+
+              const SizedBox(height: 16),
+
+              // ── Create account link ────────────────────────────────────
+              Center(
+                child: GestureDetector(
+                  onTap: _isLoading
+                      ? null
+                      : () => Navigator.push(
+                          context,
+                          MaterialPageRoute(
+                            builder: (_) => const CreateAccountScreen(),
+                          ),
+                        ),
+                  child: RichText(
+                    text: TextSpan(
+                      text: "Don't have an account? ",
+                      style: TextStyle(fontSize: 14, color: subtextColor),
+                      children: [
+                        TextSpan(
+                          text: 'Register',
+                          style: TextStyle(
+                            fontSize: 14,
+                            fontWeight: FontWeight.w700,
+                            color: Colors.teal.shade600,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
+              ),
+
               const SizedBox(height: 32),
             ],
           ),

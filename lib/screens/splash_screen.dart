@@ -1,7 +1,6 @@
 import 'package:flutter/material.dart';
 import '../constants.dart';
-import 'role_selection_screen.dart';
-import '../services/auth_service.dart';
+import '../user_screens/registration/login_screen.dart';
 import '../services/preferences_service.dart';
 import '../user_screens/main_navigation.dart';
 import '../main.dart';
@@ -18,96 +17,69 @@ class _SplashScreenState extends State<SplashScreen>
   late AnimationController _controller;
   late Animation<double> _fadeIn;
   late Animation<double> _scale;
-
   bool _exiting = false;
 
   @override
   void initState() {
     super.initState();
-
     _controller = AnimationController(
       vsync: this,
       duration: const Duration(milliseconds: 1200),
     );
-
     _fadeIn = Tween<double>(
       begin: 0.0,
       end: 1.0,
     ).animate(CurvedAnimation(parent: _controller, curve: Curves.easeOut));
-
     _scale = Tween<double>(
       begin: 0.85,
       end: 1.0,
     ).animate(CurvedAnimation(parent: _controller, curve: Curves.easeOutCubic));
-
     _startSequence();
   }
 
   void _startSequence() async {
     await Future.delayed(const Duration(milliseconds: 400));
-
     _controller.forward();
-
     await Future.delayed(const Duration(milliseconds: 2800));
 
     if (!mounted) return;
-
     setState(() => _exiting = true);
-
     await Future.delayed(const Duration(milliseconds: 500));
-
     if (!mounted) return;
 
-    // ── Auth check ────────────────────────────────────────────────────────
-    // We verify the session against the SERVER, not just the local token.
-    // This catches cases where the account was deleted from the dashboard
-    // or the token has expired/been revoked — and routes to login instead
-    // of crashing into the home screen with a dead session.
+    // Validate session against server — not just the local cache
     Widget destination;
-
     try {
-      // getUser() hits the Supabase API — throws if session is invalid
       final response = await supabase.auth.getUser();
       final user = response.user;
-
-      // Must have a real, email-verified user
       if (user != null && user.emailConfirmedAt != null) {
         destination = const MainNavigation();
       } else {
-        // Logged in but email not verified — clear stale state and send to login
         await _clearStaleSession();
-        destination = const RoleSelectionScreen();
+        destination = const LoginScreen();
       }
     } catch (_) {
-      // getUser() threw — session is dead (account deleted, token revoked, etc.)
+      // Session dead (deleted account, revoked token, network error)
       await _clearStaleSession();
-      destination = const RoleSelectionScreen();
+      destination = const LoginScreen();
     }
-    // ──────────────────────────────────────────────────────────────────────
 
     if (!mounted) return;
-
     Navigator.pushReplacement(
       context,
       PageRouteBuilder(
-        pageBuilder: (context, animation, secondaryAnimation) => destination,
+        pageBuilder: (_, __, ___) => destination,
         transitionDuration: const Duration(milliseconds: 600),
-        transitionsBuilder: (context, animation, secondaryAnimation, child) {
-          return FadeTransition(opacity: animation, child: child);
-        },
+        transitionsBuilder: (_, animation, __, child) =>
+            FadeTransition(opacity: animation, child: child),
       ),
     );
   }
 
-  /// Wipes the local Supabase session + all cached preferences so we start
-  /// completely clean the next time a user logs in.
   Future<void> _clearStaleSession() async {
     try {
       await supabase.auth.signOut();
-    } catch (_) {
-      // signOut can also throw if the token is already dead — that's fine,
-      // we just want the local state gone.
-    }
+    } catch (_) {}
     await PreferencesService.clearAll();
   }
 
