@@ -115,7 +115,7 @@ class _MainNavigationState extends State<MainNavigation> {
               padding: const EdgeInsets.fromLTRB(8, 12, 14, 12),
               decoration: BoxDecoration(
                 color: isDark
-                    ? Colors.teal.shade800.withOpacity(0.9)
+                    ? Colors.teal.shade800.withOpacity(0.5)
                     : Colors.teal.shade600,
                 borderRadius: const BorderRadius.only(
                   topRight: Radius.circular(20),
