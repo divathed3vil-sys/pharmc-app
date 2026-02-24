@@ -16,7 +16,16 @@ class OrderTrackingPopup extends StatefulWidget {
       transitionDuration: const Duration(milliseconds: 350),
       pageBuilder: (context, anim1, anim2) => OrderTrackingPopup(order: order),
       transitionBuilder: (context, anim1, anim2, child) {
-        return FadeTransition(opacity: anim1, child: child);
+        return FadeTransition(
+          opacity: CurvedAnimation(parent: anim1, curve: Curves.easeOut),
+          child: ScaleTransition(
+            scale: Tween<double>(
+              begin: 0.95,
+              end: 1.0,
+            ).animate(CurvedAnimation(parent: anim1, curve: Curves.easeOut)),
+            child: child,
+          ),
+        );
       },
     );
   }
@@ -26,13 +35,22 @@ class OrderTrackingPopup extends StatefulWidget {
 }
 
 class _OrderTrackingPopupState extends State<OrderTrackingPopup> {
-  // 0 = tracking view, 1 = prescription view
-  int _currentView = 0;
+  // View switcher — 0 = tracking, 1 = prescriptions
+  // Using a PageController so both views slide inside a fixed-size container.
+  // This is the key fix for the broken swipe: AnimatedSwitcher was re-rendering
+  // both widgets simultaneously and resizing the container. PageView keeps the
+  // container locked and handles the slide entirely within it.
+  final PageController _viewController = PageController();
+
+  // Separate PageController for swiping between prescription images
+  final PageController _imagePageController = PageController();
+  int _currentImagePage = 0;
+
   List<Map<String, dynamic>> _prescriptionImages = [];
   bool _loadingImages = false;
 
-  // Page controller for prescription swipe
-  final PageController _pageController = PageController();
+  // Per-image TransformationControllers for the zoom buttons
+  final Map<int, TransformationController> _zoomControllers = {};
 
   @override
   void initState() {
@@ -42,8 +60,58 @@ class _OrderTrackingPopupState extends State<OrderTrackingPopup> {
 
   @override
   void dispose() {
-    _pageController.dispose();
+    _viewController.dispose();
+    _imagePageController.dispose();
+    for (final c in _zoomControllers.values) {
+      c.dispose();
+    }
     super.dispose();
+  }
+
+  // Returns (or lazily creates) the TransformationController for image at [index]
+  TransformationController _zoomFor(int index) {
+    return _zoomControllers.putIfAbsent(
+      index,
+      () => TransformationController(),
+    );
+  }
+
+  void _zoomIn(int index) {
+    final controller = _zoomFor(index);
+    final current = controller.value;
+    // Read the current scale from the matrix diagonal
+    final currentScale = current.getMaxScaleOnAxis();
+    final newScale = (currentScale * 1.4).clamp(1.0, 4.0);
+    // Scale around the center of the widget
+    controller.value = Matrix4.identity()..scale(newScale);
+  }
+
+  void _zoomOut(int index) {
+    final controller = _zoomFor(index);
+    final current = controller.value;
+    final currentScale = current.getMaxScaleOnAxis();
+    final newScale = (currentScale / 1.4).clamp(1.0, 4.0);
+    if (newScale <= 1.0) {
+      controller.value = Matrix4.identity();
+    } else {
+      controller.value = Matrix4.identity()..scale(newScale);
+    }
+  }
+
+  void _switchToPrescriptions() {
+    _viewController.animateToPage(
+      1,
+      duration: const Duration(milliseconds: 300),
+      curve: Curves.easeInOut,
+    );
+  }
+
+  void _switchToTracking() {
+    _viewController.animateToPage(
+      0,
+      duration: const Duration(milliseconds: 300),
+      curve: Curves.easeInOut,
+    );
   }
 
   Future<void> _loadPrescriptions() async {
@@ -63,10 +131,8 @@ class _OrderTrackingPopupState extends State<OrderTrackingPopup> {
     }
   }
 
-  // Get tracking steps based on order status
   List<Map<String, dynamic>> _getTrackingSteps() {
     final status = widget.order['status'] ?? 'order_placed';
-
     final allSteps = [
       {'label': 'Order Placed', 'key': 'order_placed'},
       {'label': 'Pharmacist Verified', 'key': 'pharmacist_verified'},
@@ -75,10 +141,8 @@ class _OrderTrackingPopupState extends State<OrderTrackingPopup> {
       {'label': 'Out for Delivery', 'key': 'out_for_delivery'},
       {'label': 'Delivered', 'key': 'delivered'},
     ];
-
     final statusOrder = allSteps.map((s) => s['key']).toList();
     final currentIndex = statusOrder.indexOf(status);
-
     return allSteps.asMap().entries.map((entry) {
       return {
         'label': entry.value['label'],
@@ -89,7 +153,6 @@ class _OrderTrackingPopupState extends State<OrderTrackingPopup> {
     }).toList();
   }
 
-  // Get verification code display
   String? _getVerificationCode() {
     final status = widget.order['status'] ?? '';
     if (status == 'out_for_delivery') {
@@ -98,100 +161,79 @@ class _OrderTrackingPopupState extends State<OrderTrackingPopup> {
     return null;
   }
 
-  void _switchToPrescriptions() {
-    setState(() => _currentView = 1);
-  }
-
-  void _switchToTracking() {
-    setState(() => _currentView = 0);
-  }
-
+  // ─────────────────────────────────────────────────────────────────────────
+  // ROOT BUILD
+  // The yellow-underline bug: showGeneralDialog doesn't inject a Material
+  // widget, so Text falls back to the raw default style (yellow + underline).
+  // Fix: wrap everything in Material(type: transparency).
+  // ─────────────────────────────────────────────────────────────────────────
   @override
   Widget build(BuildContext context) {
     final isDark = Theme.of(context).brightness == Brightness.dark;
+    final popupHeight = MediaQuery.of(context).size.height * 0.80;
+    final popupWidth = MediaQuery.of(context).size.width * 0.9;
 
-    return GestureDetector(
-      onTap: () => Navigator.pop(context), // Tap background to close
-      child: Stack(
-        children: [
-          // Blurred Background
-          BackdropFilter(
-            filter: ImageFilter.blur(sigmaX: 12, sigmaY: 12),
-            child: Container(
-              color: Colors.black.withOpacity(isDark ? 0.6 : 0.4),
-            ),
-          ),
-
-          // Popup Content
-          Center(
-            child: GestureDetector(
-              onTap: () {}, // Prevent closing when tapping popup
-              onVerticalDragEnd: (details) {
-                // Swipe down to close
-                if (details.primaryVelocity != null &&
-                    details.primaryVelocity! > 300) {
-                  Navigator.pop(context);
-                }
-              },
-              onHorizontalDragEnd: (details) {
-                // Swipe left to show prescriptions
-                if (details.primaryVelocity != null &&
-                    details.primaryVelocity! < -300) {
-                  _switchToPrescriptions();
-                }
-                // Swipe right to go back to tracking
-                if (details.primaryVelocity != null &&
-                    details.primaryVelocity! > 300) {
-                  _switchToTracking();
-                }
-              },
+    return Material(
+      // ← fixes yellow underlines
+      type: MaterialType.transparency,
+      child: GestureDetector(
+        onTap: () => Navigator.pop(context),
+        child: Stack(
+          children: [
+            // Blurred background
+            BackdropFilter(
+              filter: ImageFilter.blur(sigmaX: 12, sigmaY: 12),
               child: Container(
-                width: MediaQuery.of(context).size.width * 0.9,
-                constraints: BoxConstraints(
-                  maxHeight: MediaQuery.of(context).size.height * 0.8,
-                ),
-                decoration: BoxDecoration(
-                  color: isDark ? const Color(0xFF1E1E1E) : Colors.white,
-                  borderRadius: BorderRadius.circular(24),
-                  boxShadow: [
-                    BoxShadow(
-                      color: Colors.black.withOpacity(0.2),
-                      blurRadius: 30,
-                      offset: const Offset(0, 10),
-                    ),
-                  ],
-                ),
-                child: AnimatedSwitcher(
-                  duration: const Duration(milliseconds: 300),
-                  transitionBuilder: (child, animation) {
-                    final isForward = _currentView == 1;
-                    return SlideTransition(
-                      position:
-                          Tween<Offset>(
-                            begin: Offset(isForward ? 1 : -1, 0),
-                            end: Offset.zero,
-                          ).animate(
-                            CurvedAnimation(
-                              parent: animation,
-                              curve: Curves.easeInOut,
-                            ),
-                          ),
-                      child: child,
-                    );
-                  },
-                  child: _currentView == 0
-                      ? _buildTrackingView(isDark)
-                      : _buildPrescriptionView(isDark),
+                color: Colors.black.withOpacity(isDark ? 0.6 : 0.4),
+              ),
+            ),
+
+            // Popup — fixed size so swipe never resizes it
+            Center(
+              child: GestureDetector(
+                onTap: () {}, // block background-close when tapping inside
+                onVerticalDragEnd: (d) {
+                  if ((d.primaryVelocity ?? 0) > 300) Navigator.pop(context);
+                },
+                child: Container(
+                  width: popupWidth,
+                  height: popupHeight,
+                  decoration: BoxDecoration(
+                    color: isDark ? const Color(0xFF1E1E1E) : Colors.white,
+                    borderRadius: BorderRadius.circular(24),
+                    boxShadow: [
+                      BoxShadow(
+                        color: Colors.black.withOpacity(0.2),
+                        blurRadius: 30,
+                        offset: const Offset(0, 10),
+                      ),
+                    ],
+                  ),
+                  // PageView replaces AnimatedSwitcher.
+                  // Both views are the same size as the container — no resize,
+                  // no individual elements sliding in the wrong direction.
+                  child: PageView(
+                    controller: _viewController,
+                    physics: const NeverScrollableScrollPhysics(),
+                    // Swipe gestures are handled manually below so they don't
+                    // conflict with the inner prescription image PageView.
+                    children: [
+                      _buildTrackingView(isDark),
+                      _buildPrescriptionView(isDark),
+                    ],
+                  ),
                 ),
               ),
             ),
-          ),
-        ],
+          ],
+        ),
       ),
     );
   }
 
-  // ===== TRACKING VIEW =====
+  // ─────────────────────────────────────────────────────────────────────────
+  // TRACKING VIEW
+  // ─────────────────────────────────────────────────────────────────────────
   Widget _buildTrackingView(bool isDark) {
     final textColor = isDark ? Colors.white : const Color(0xFF1A1A1A);
     final subtextColor = isDark ? Colors.grey.shade400 : Colors.grey.shade500;
@@ -200,28 +242,28 @@ class _OrderTrackingPopupState extends State<OrderTrackingPopup> {
     final verificationCode = _getVerificationCode();
     final status = widget.order['status'] ?? 'order_placed';
     final statusConfig = _getStatusConfig(status);
-
     final orderName = widget.order['order_name'] ?? 'My Order';
     final orderId =
         widget.order['id']?.toString().substring(0, 8).toUpperCase() ?? '';
     final pharmacyName = widget.order['pharmacy_name'] ?? 'Pharmacy';
-    final totalPrice = widget.order['total_price'] ?? 0.0;
+    final totalPrice = (widget.order['total_price'] as num?)?.toDouble() ?? 0.0;
     final paymentMethod = widget.order['payment_method'] ?? 'cash';
 
-    return SingleChildScrollView(
-      key: const ValueKey('tracking'),
-      physics: const BouncingScrollPhysics(),
-      child: Padding(
+    return GestureDetector(
+      onHorizontalDragEnd: (d) {
+        if ((d.primaryVelocity ?? 0) < -300) _switchToPrescriptions();
+      },
+      child: SingleChildScrollView(
+        physics: const BouncingScrollPhysics(),
         padding: const EdgeInsets.all(24),
         child: Column(
           mainAxisSize: MainAxisSize.min,
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            // Top Bar: Drag handle + Close
+            // ── Top bar ──────────────────────────────────────────────────
             Row(
               mainAxisAlignment: MainAxisAlignment.spaceBetween,
               children: [
-                // Drag indicator
                 Container(
                   width: 40,
                   height: 4,
@@ -255,7 +297,7 @@ class _OrderTrackingPopupState extends State<OrderTrackingPopup> {
 
             const SizedBox(height: 20),
 
-            // Order Name + ID
+            // ── Order name + ID ──────────────────────────────────────────
             Text(
               orderName,
               style: TextStyle(
@@ -299,7 +341,7 @@ class _OrderTrackingPopupState extends State<OrderTrackingPopup> {
 
             const SizedBox(height: 20),
 
-            // Pharmacy Info
+            // ── Pharmacy row ─────────────────────────────────────────────
             Container(
               width: double.infinity,
               padding: const EdgeInsets.all(14),
@@ -337,7 +379,7 @@ class _OrderTrackingPopupState extends State<OrderTrackingPopup> {
 
             const SizedBox(height: 20),
 
-            // Tracking Timeline
+            // ── Tracking timeline ────────────────────────────────────────
             Text(
               'Order Progress',
               style: TextStyle(
@@ -426,7 +468,7 @@ class _OrderTrackingPopupState extends State<OrderTrackingPopup> {
 
             const SizedBox(height: 20),
 
-            // Verification Code Section
+            // ── Verification code ────────────────────────────────────────
             _buildVerificationSection(
               verificationCode,
               isDark,
@@ -437,7 +479,7 @@ class _OrderTrackingPopupState extends State<OrderTrackingPopup> {
 
             const SizedBox(height: 20),
 
-            // Price Breakdown
+            // ── Price breakdown ──────────────────────────────────────────
             Container(
               width: double.infinity,
               padding: const EdgeInsets.all(16),
@@ -456,7 +498,7 @@ class _OrderTrackingPopupState extends State<OrderTrackingPopup> {
                           style: TextStyle(fontSize: 13, color: subtextColor),
                         ),
                         Text(
-                          'LKR ${(widget.order['medicine_cost'] ?? 0.0).toStringAsFixed(2)}',
+                          'LKR ${((widget.order['medicine_cost'] ?? 0.0) as num).toStringAsFixed(2)}',
                           style: TextStyle(fontSize: 13, color: textColor),
                         ),
                       ],
@@ -470,7 +512,7 @@ class _OrderTrackingPopupState extends State<OrderTrackingPopup> {
                           style: TextStyle(fontSize: 13, color: subtextColor),
                         ),
                         Text(
-                          'LKR ${(widget.order['delivery_fee'] ?? 0.0).toStringAsFixed(2)}',
+                          'LKR ${((widget.order['delivery_fee'] ?? 0.0) as num).toStringAsFixed(2)}',
                           style: TextStyle(fontSize: 13, color: textColor),
                         ),
                       ],
@@ -514,15 +556,12 @@ class _OrderTrackingPopupState extends State<OrderTrackingPopup> {
               ),
             ),
 
-            // Reject button (only when price is ready)
+            // ── Reject price (only when price_confirmed) ─────────────────
             if (status == 'price_confirmed') ...[
               const SizedBox(height: 8),
               Center(
                 child: TextButton(
-                  onPressed: () {
-                    // TODO: Implement reject logic
-                    Navigator.pop(context);
-                  },
+                  onPressed: () => Navigator.pop(context),
                   child: Text(
                     'Reject Price',
                     style: TextStyle(
@@ -536,7 +575,7 @@ class _OrderTrackingPopupState extends State<OrderTrackingPopup> {
 
             const SizedBox(height: 20),
 
-            // Action Buttons
+            // ── Action buttons ───────────────────────────────────────────
             Row(
               children: [
                 Expanded(
@@ -567,10 +606,7 @@ class _OrderTrackingPopupState extends State<OrderTrackingPopup> {
                   child: SizedBox(
                     height: 48,
                     child: ElevatedButton.icon(
-                      onPressed: () {
-                        Navigator.pop(context);
-                        // TODO: Navigate to Payment Screen (Part 3)
-                      },
+                      onPressed: () => Navigator.pop(context),
                       icon: const Icon(Icons.receipt_long_rounded, size: 18),
                       label: const Text(
                         'Payment',
@@ -593,7 +629,6 @@ class _OrderTrackingPopupState extends State<OrderTrackingPopup> {
               ],
             ),
 
-            // Swipe hint
             const SizedBox(height: 16),
             Center(
               child: Text(
@@ -610,6 +645,299 @@ class _OrderTrackingPopupState extends State<OrderTrackingPopup> {
     );
   }
 
+  // ─────────────────────────────────────────────────────────────────────────
+  // PRESCRIPTION VIEW
+  // ─────────────────────────────────────────────────────────────────────────
+  Widget _buildPrescriptionView(bool isDark) {
+    final textColor = isDark ? Colors.white : const Color(0xFF1A1A1A);
+    final subtextColor = isDark ? Colors.grey.shade400 : Colors.grey.shade500;
+    final notes = widget.order['notes'] ?? '';
+
+    return GestureDetector(
+      onHorizontalDragEnd: (d) {
+        if ((d.primaryVelocity ?? 0) > 300) _switchToTracking();
+      },
+      child: Padding(
+        padding: const EdgeInsets.all(24),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            // ── Top bar ──────────────────────────────────────────────────
+            Row(
+              children: [
+                GestureDetector(
+                  onTap: _switchToTracking,
+                  child: Container(
+                    width: 36,
+                    height: 36,
+                    decoration: BoxDecoration(
+                      color: isDark
+                          ? Colors.grey.shade800
+                          : Colors.grey.shade200,
+                      borderRadius: BorderRadius.circular(10),
+                    ),
+                    child: Icon(
+                      Icons.arrow_back_rounded,
+                      size: 20,
+                      color: textColor,
+                    ),
+                  ),
+                ),
+                const SizedBox(width: 12),
+                Text(
+                  'Prescriptions',
+                  style: TextStyle(
+                    fontSize: 18,
+                    fontWeight: FontWeight.w700,
+                    color: textColor,
+                  ),
+                ),
+                const Spacer(),
+                GestureDetector(
+                  onTap: () => Navigator.pop(context),
+                  child: Container(
+                    width: 32,
+                    height: 32,
+                    decoration: BoxDecoration(
+                      color: isDark
+                          ? Colors.grey.shade800
+                          : Colors.grey.shade200,
+                      shape: BoxShape.circle,
+                    ),
+                    child: Icon(
+                      Icons.close_rounded,
+                      size: 18,
+                      color: isDark
+                          ? Colors.grey.shade400
+                          : Colors.grey.shade600,
+                    ),
+                  ),
+                ),
+              ],
+            ),
+
+            const SizedBox(height: 20),
+
+            // ── Images ───────────────────────────────────────────────────
+            if (_loadingImages)
+              const Expanded(child: Center(child: CircularProgressIndicator()))
+            else if (_prescriptionImages.isEmpty)
+              Expanded(
+                child: Center(
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Icon(
+                        Icons.image_not_supported_rounded,
+                        size: 48,
+                        color: Colors.grey.shade400,
+                      ),
+                      const SizedBox(height: 12),
+                      Text(
+                        'No prescriptions found',
+                        style: TextStyle(color: subtextColor),
+                      ),
+                    ],
+                  ),
+                ),
+              )
+            else ...[
+              // Image viewer — expands to fill remaining space
+              Expanded(
+                child: Stack(
+                  children: [
+                    // Image PageView (swipe between multiple images)
+                    PageView.builder(
+                      controller: _imagePageController,
+                      itemCount: _prescriptionImages.length,
+                      onPageChanged: (i) =>
+                          setState(() => _currentImagePage = i),
+                      itemBuilder: (context, index) {
+                        final imagePath =
+                            _prescriptionImages[index]['image_url'] as String;
+                        final zoomCtrl = _zoomFor(index);
+
+                        return Container(
+                          margin: const EdgeInsets.symmetric(horizontal: 4),
+                          decoration: BoxDecoration(
+                            color: isDark
+                                ? Colors.grey.shade800
+                                : Colors.grey.shade100,
+                            borderRadius: BorderRadius.circular(16),
+                          ),
+                          child: ClipRRect(
+                            borderRadius: BorderRadius.circular(16),
+                            child: InteractiveViewer(
+                              transformationController: zoomCtrl,
+                              minScale: 1.0,
+                              maxScale: 4.0,
+                              child: FutureBuilder<String>(
+                                future: _getSignedUrl(imagePath),
+                                builder: (context, snapshot) {
+                                  if (!snapshot.hasData) {
+                                    return const Center(
+                                      child: CircularProgressIndicator(),
+                                    );
+                                  }
+                                  return Image.network(
+                                    snapshot.data!,
+                                    fit: BoxFit.contain,
+                                    errorBuilder: (_, __, ___) => Icon(
+                                      Icons.broken_image_rounded,
+                                      size: 48,
+                                      color: Colors.grey.shade400,
+                                    ),
+                                  );
+                                },
+                              ),
+                            ),
+                          ),
+                        );
+                      },
+                    ),
+
+                    // Image counter badge (top-right)
+                    if (_prescriptionImages.length > 1)
+                      Positioned(
+                        top: 10,
+                        right: 14,
+                        child: Container(
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: 10,
+                            vertical: 5,
+                          ),
+                          decoration: BoxDecoration(
+                            color: Colors.black.withOpacity(0.6),
+                            borderRadius: BorderRadius.circular(8),
+                          ),
+                          child: Text(
+                            '${_currentImagePage + 1} / ${_prescriptionImages.length}',
+                            style: const TextStyle(
+                              fontSize: 12,
+                              color: Colors.white,
+                              fontWeight: FontWeight.w600,
+                            ),
+                          ),
+                        ),
+                      ),
+
+                    // ── Zoom buttons (bottom-right) ───────────────────────
+                    Positioned(
+                      bottom: 12,
+                      right: 14,
+                      child: Column(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          _buildZoomButton(
+                            icon: Icons.add_rounded,
+                            onTap: () =>
+                                setState(() => _zoomIn(_currentImagePage)),
+                            isDark: isDark,
+                          ),
+                          const SizedBox(height: 6),
+                          _buildZoomButton(
+                            icon: Icons.remove_rounded,
+                            onTap: () =>
+                                setState(() => _zoomOut(_currentImagePage)),
+                            isDark: isDark,
+                          ),
+                        ],
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+
+              // Page dots
+              if (_prescriptionImages.length > 1) ...[
+                const SizedBox(height: 12),
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: List.generate(_prescriptionImages.length, (i) {
+                    final isActive = i == _currentImagePage;
+                    return AnimatedContainer(
+                      duration: const Duration(milliseconds: 200),
+                      width: isActive ? 18 : 8,
+                      height: 8,
+                      margin: const EdgeInsets.symmetric(horizontal: 3),
+                      decoration: BoxDecoration(
+                        borderRadius: BorderRadius.circular(4),
+                        color: isActive
+                            ? Colors.teal.shade600
+                            : Colors.teal.shade600.withOpacity(0.25),
+                      ),
+                    );
+                  }),
+                ),
+              ],
+            ],
+
+            // ── Notes ────────────────────────────────────────────────────
+            if (notes.isNotEmpty) ...[
+              const SizedBox(height: 16),
+              Text(
+                'Notes',
+                style: TextStyle(
+                  fontSize: 14,
+                  fontWeight: FontWeight.w600,
+                  color: subtextColor,
+                ),
+              ),
+              const SizedBox(height: 8),
+              Container(
+                width: double.infinity,
+                padding: const EdgeInsets.all(14),
+                decoration: BoxDecoration(
+                  color: isDark
+                      ? const Color(0xFF2A2A2A)
+                      : const Color(0xFFF8F9FA),
+                  borderRadius: BorderRadius.circular(12),
+                ),
+                child: Text(
+                  notes,
+                  style: TextStyle(fontSize: 14, color: textColor, height: 1.5),
+                ),
+              ),
+            ],
+
+            const SizedBox(height: 12),
+            Center(
+              child: Text(
+                'Swipe right to go back',
+                style: TextStyle(
+                  fontSize: 11,
+                  color: isDark ? Colors.grey.shade600 : Colors.grey.shade400,
+                ),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildZoomButton({
+    required IconData icon,
+    required VoidCallback onTap,
+    required bool isDark,
+  }) {
+    return GestureDetector(
+      onTap: onTap,
+      child: Container(
+        width: 36,
+        height: 36,
+        decoration: BoxDecoration(
+          color: Colors.black.withOpacity(0.55),
+          borderRadius: BorderRadius.circular(10),
+        ),
+        child: Icon(icon, color: Colors.white, size: 20),
+      ),
+    );
+  }
+
+  // ─────────────────────────────────────────────────────────────────────────
+  // VERIFICATION SECTION
+  // ─────────────────────────────────────────────────────────────────────────
   Widget _buildVerificationSection(
     String? code,
     bool isDark,
@@ -619,7 +947,6 @@ class _OrderTrackingPopupState extends State<OrderTrackingPopup> {
   ) {
     final status = widget.order['status'] ?? '';
 
-    // Only show when relevant
     if (status != 'out_for_delivery' && status != 'delivered') {
       return Container(
         width: double.infinity,
@@ -648,7 +975,7 @@ class _OrderTrackingPopupState extends State<OrderTrackingPopup> {
                 style: TextStyle(
                   fontSize: 13,
                   fontWeight: FontWeight.w600,
-                  color: isDark ? Colors.grey.shade500 : Colors.grey.shade500,
+                  color: Colors.grey.shade500,
                 ),
               ),
             ),
@@ -657,7 +984,6 @@ class _OrderTrackingPopupState extends State<OrderTrackingPopup> {
       );
     }
 
-    // Show PIN when out for delivery
     if (status == 'out_for_delivery') {
       final digits = (code ?? '----').split('');
       return Container(
@@ -732,7 +1058,7 @@ class _OrderTrackingPopupState extends State<OrderTrackingPopup> {
       );
     }
 
-    // Delivered - Verified
+    // Delivered
     return Container(
       width: double.infinity,
       padding: const EdgeInsets.all(16),
@@ -765,278 +1091,8 @@ class _OrderTrackingPopupState extends State<OrderTrackingPopup> {
     );
   }
 
-  // ===== PRESCRIPTION VIEW =====
-  Widget _buildPrescriptionView(bool isDark) {
-    final textColor = isDark ? Colors.white : const Color(0xFF1A1A1A);
-    final subtextColor = isDark ? Colors.grey.shade400 : Colors.grey.shade500;
-    final notes = widget.order['notes'] ?? '';
-
-    return Padding(
-      key: const ValueKey('prescriptions'),
-      padding: const EdgeInsets.all(24),
-      child: Column(
-        mainAxisSize: MainAxisSize.min,
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          // Top Bar
-          Row(
-            children: [
-              GestureDetector(
-                onTap: _switchToTracking,
-                child: Container(
-                  width: 36,
-                  height: 36,
-                  decoration: BoxDecoration(
-                    color: isDark ? Colors.grey.shade800 : Colors.grey.shade200,
-                    borderRadius: BorderRadius.circular(10),
-                  ),
-                  child: Icon(
-                    Icons.arrow_back_rounded,
-                    size: 20,
-                    color: textColor,
-                  ),
-                ),
-              ),
-              const SizedBox(width: 12),
-              Text(
-                'Prescriptions',
-                style: TextStyle(
-                  fontSize: 18,
-                  fontWeight: FontWeight.w700,
-                  color: textColor,
-                ),
-              ),
-              const Spacer(),
-              GestureDetector(
-                onTap: () => Navigator.pop(context),
-                child: Container(
-                  width: 32,
-                  height: 32,
-                  decoration: BoxDecoration(
-                    color: isDark ? Colors.grey.shade800 : Colors.grey.shade200,
-                    shape: BoxShape.circle,
-                  ),
-                  child: Icon(
-                    Icons.close_rounded,
-                    size: 18,
-                    color: isDark ? Colors.grey.shade400 : Colors.grey.shade600,
-                  ),
-                ),
-              ),
-            ],
-          ),
-
-          const SizedBox(height: 20),
-
-          // Images
-          if (_loadingImages)
-            const Center(
-              child: Padding(
-                padding: EdgeInsets.all(40),
-                child: CircularProgressIndicator(),
-              ),
-            )
-          else if (_prescriptionImages.isEmpty)
-            Center(
-              child: Padding(
-                padding: const EdgeInsets.all(40),
-                child: Column(
-                  children: [
-                    Icon(
-                      Icons.image_not_supported_rounded,
-                      size: 48,
-                      color: Colors.grey.shade400,
-                    ),
-                    const SizedBox(height: 12),
-                    Text(
-                      'No prescriptions found',
-                      style: TextStyle(color: subtextColor),
-                    ),
-                  ],
-                ),
-              ),
-            )
-          else
-            SizedBox(
-              height: 300,
-              child: PageView.builder(
-                controller: _pageController,
-                itemCount: _prescriptionImages.length,
-                itemBuilder: (context, index) {
-                  final image = _prescriptionImages[index];
-                  final imagePath = image['image_url'] as String;
-
-                  return Container(
-                    margin: const EdgeInsets.symmetric(horizontal: 4),
-                    decoration: BoxDecoration(
-                      color: isDark
-                          ? Colors.grey.shade800
-                          : Colors.grey.shade100,
-                      borderRadius: BorderRadius.circular(16),
-                    ),
-                    child: Stack(
-                      children: [
-                        // Image with zoom
-                        ClipRRect(
-                          borderRadius: BorderRadius.circular(16),
-                          child: InteractiveViewer(
-                            minScale: 0.5,
-                            maxScale: 4.0,
-                            child: Center(
-                              child: FutureBuilder<String>(
-                                future: _getSignedUrl(imagePath),
-                                builder: (context, snapshot) {
-                                  if (!snapshot.hasData) {
-                                    return const CircularProgressIndicator();
-                                  }
-                                  return Image.network(
-                                    snapshot.data!,
-                                    fit: BoxFit.contain,
-                                    errorBuilder: (_, __, ___) => Icon(
-                                      Icons.broken_image_rounded,
-                                      size: 48,
-                                      color: Colors.grey.shade400,
-                                    ),
-                                  );
-                                },
-                              ),
-                            ),
-                          ),
-                        ),
-                        // Image counter badge
-                        Positioned(
-                          top: 10,
-                          right: 10,
-                          child: Container(
-                            padding: const EdgeInsets.symmetric(
-                              horizontal: 10,
-                              vertical: 5,
-                            ),
-                            decoration: BoxDecoration(
-                              color: Colors.black.withOpacity(0.6),
-                              borderRadius: BorderRadius.circular(8),
-                            ),
-                            child: Text(
-                              '${index + 1} / ${_prescriptionImages.length}',
-                              style: const TextStyle(
-                                fontSize: 12,
-                                color: Colors.white,
-                                fontWeight: FontWeight.w600,
-                              ),
-                            ),
-                          ),
-                        ),
-                        // Zoom hint
-                        Positioned(
-                          bottom: 10,
-                          left: 0,
-                          right: 0,
-                          child: Center(
-                            child: Container(
-                              padding: const EdgeInsets.symmetric(
-                                horizontal: 12,
-                                vertical: 6,
-                              ),
-                              decoration: BoxDecoration(
-                                color: Colors.black.withOpacity(0.5),
-                                borderRadius: BorderRadius.circular(20),
-                              ),
-                              child: const Row(
-                                mainAxisSize: MainAxisSize.min,
-                                children: [
-                                  Icon(
-                                    Icons.zoom_in_rounded,
-                                    size: 14,
-                                    color: Colors.white,
-                                  ),
-                                  SizedBox(width: 4),
-                                  Text(
-                                    'Pinch to zoom',
-                                    style: TextStyle(
-                                      fontSize: 11,
-                                      color: Colors.white,
-                                    ),
-                                  ),
-                                ],
-                              ),
-                            ),
-                          ),
-                        ),
-                      ],
-                    ),
-                  );
-                },
-              ),
-            ),
-
-          // Page dots
-          if (_prescriptionImages.length > 1) ...[
-            const SizedBox(height: 12),
-            Row(
-              mainAxisAlignment: MainAxisAlignment.center,
-              children: List.generate(_prescriptionImages.length, (i) {
-                return AnimatedContainer(
-                  duration: const Duration(milliseconds: 200),
-                  width: 8,
-                  height: 8,
-                  margin: const EdgeInsets.symmetric(horizontal: 3),
-                  decoration: BoxDecoration(
-                    shape: BoxShape.circle,
-                    color: Colors.teal.shade600.withOpacity(0.3),
-                  ),
-                );
-              }),
-            ),
-          ],
-
-          // Notes
-          if (notes.isNotEmpty) ...[
-            const SizedBox(height: 20),
-            Text(
-              'Notes',
-              style: TextStyle(
-                fontSize: 14,
-                fontWeight: FontWeight.w600,
-                color: subtextColor,
-              ),
-            ),
-            const SizedBox(height: 8),
-            Container(
-              width: double.infinity,
-              padding: const EdgeInsets.all(14),
-              decoration: BoxDecoration(
-                color: isDark
-                    ? const Color(0xFF2A2A2A)
-                    : const Color(0xFFF8F9FA),
-                borderRadius: BorderRadius.circular(12),
-              ),
-              child: Text(
-                notes,
-                style: TextStyle(fontSize: 14, color: textColor, height: 1.5),
-              ),
-            ),
-          ],
-
-          const SizedBox(height: 16),
-          Center(
-            child: Text(
-              'Swipe right to go back',
-              style: TextStyle(
-                fontSize: 11,
-                color: isDark ? Colors.grey.shade600 : Colors.grey.shade400,
-              ),
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-
   Future<String> _getSignedUrl(String path) async {
-    final response = await supabase.storage
-        .from('prescriptions')
-        .createSignedUrl(path, 3600);
-    return response;
+    return supabase.storage.from('prescriptions').createSignedUrl(path, 3600);
   }
 
   Map<String, dynamic> _getStatusConfig(String status) {

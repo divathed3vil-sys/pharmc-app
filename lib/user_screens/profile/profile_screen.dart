@@ -1,9 +1,10 @@
 import 'package:flutter/material.dart';
 import '../../constants.dart';
+import '../../services/auth_service.dart';
 import '../../services/preferences_service.dart';
+import '../../screens/role_selection_screen.dart';
 import 'settings_screen.dart';
 import 'edit_profile_screen.dart';
-import '../../screens/splash_screen.dart';
 import '../address/saved_addresses_screen.dart';
 
 class ProfileScreen extends StatefulWidget {
@@ -32,6 +33,21 @@ class _ProfileScreenState extends State<ProfileScreen> {
       _email = PreferencesService.getUserEmail() ?? '';
       _age = PreferencesService.getUserAge() ?? 0;
     });
+  }
+
+  // ── Navigate to login, clearing everything behind us ──────────────────────
+  void _goToLogin() {
+    if (!mounted) return;
+    Navigator.pushAndRemoveUntil(
+      context,
+      PageRouteBuilder(
+        pageBuilder: (_, __, ___) => const RoleSelectionScreen(),
+        transitionDuration: const Duration(milliseconds: 400),
+        transitionsBuilder: (_, animation, __, child) =>
+            FadeTransition(opacity: animation, child: child),
+      ),
+      (route) => false, // remove every screen below — no going "back" to home
+    );
   }
 
   void _logout() {
@@ -117,16 +133,12 @@ class _ProfileScreenState extends State<ProfileScreen> {
                       height: 48,
                       child: ElevatedButton(
                         onPressed: () async {
-                          await PreferencesService.clearAll();
-                          if (mounted) {
-                            Navigator.pushAndRemoveUntil(
-                              context,
-                              MaterialPageRoute(
-                                builder: (_) => const SplashScreen(),
-                              ),
-                              (route) => false,
-                            );
-                          }
+                          Navigator.pop(context); // close dialog first
+                          // ✅ Actually sign out from Supabase — kills the token
+                          await AuthService.signOut();
+                          // AuthService.signOut() already calls
+                          // PreferencesService.clearAll() internally
+                          _goToLogin();
                         },
                         style: ElevatedButton.styleFrom(
                           backgroundColor: Colors.red.shade500,
@@ -235,16 +247,12 @@ class _ProfileScreenState extends State<ProfileScreen> {
                       height: 48,
                       child: ElevatedButton(
                         onPressed: () async {
-                          await PreferencesService.clearAll();
-                          if (mounted) {
-                            Navigator.pushAndRemoveUntil(
-                              context,
-                              MaterialPageRoute(
-                                builder: (_) => const SplashScreen(),
-                              ),
-                              (route) => false,
-                            );
-                          }
+                          Navigator.pop(context); // close dialog first
+                          // ✅ Deletes profile row from DB + signs out
+                          await AuthService.deleteAccount();
+                          // AuthService.deleteAccount() calls signOut()
+                          // which calls PreferencesService.clearAll()
+                          _goToLogin();
                         },
                         style: ElevatedButton.styleFrom(
                           backgroundColor: Colors.red.shade500,
@@ -386,10 +394,8 @@ class _ProfileScreenState extends State<ProfileScreen> {
               style: TextStyle(fontSize: 15, color: subtextColor),
             ),
             const SizedBox(height: 32),
-            // Info cards
             _buildInfoSection(isDark, cardColor, subtextColor),
             const SizedBox(height: 24),
-            // Menu items
             _buildMenuItem(
               icon: Icons.edit_rounded,
               title: 'Edit Profile',
@@ -406,7 +412,6 @@ class _ProfileScreenState extends State<ProfileScreen> {
                 _loadProfile();
               },
             ),
-
             _buildMenuItem(
               icon: Icons.location_on_outlined,
               title: 'Saved Addresses',
@@ -424,7 +429,6 @@ class _ProfileScreenState extends State<ProfileScreen> {
                 );
               },
             ),
-
             _buildMenuItem(
               icon: Icons.settings_rounded,
               title: 'App Settings',
@@ -469,9 +473,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
               cardColor: cardColor,
               textColor: textColor,
               subtextColor: subtextColor,
-              onTap: () {
-                _showAboutDialog(isDark);
-              },
+              onTap: () => _showAboutDialog(isDark),
             ),
             const SizedBox(height: 16),
             _buildMenuItem(

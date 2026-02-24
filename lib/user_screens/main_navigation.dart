@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
-import 'package:shared_preferences/shared_preferences.dart';
 import 'home_screen.dart';
 import 'payment_screen.dart';
+import '../main.dart';
 
 class MainNavigation extends StatefulWidget {
   const MainNavigation({super.key});
@@ -10,330 +10,184 @@ class MainNavigation extends StatefulWidget {
   State<MainNavigation> createState() => _MainNavigationState();
 }
 
-class _MainNavigationState extends State<MainNavigation> {
+class _MainNavigationState extends State<MainNavigation>
+    with SingleTickerProviderStateMixin {
   final PageController _pageController = PageController(initialPage: 1);
   int _currentPage = 1; // 0 = Payment, 1 = Home
 
-  // Tutorial state
-  bool _showTutorial = false;
-  bool _dontShowAgain = false;
-  // ignore: unused_field
-  int _orderCount = 0;
+  // Pulse animation controller — only runs when payment is needed
+  late AnimationController _pulseController;
+  late Animation<double> _pulseAnim;
+
+  // Whether the payment screen has orders that need attention
+  bool _hasPaymentPending = false;
 
   @override
   void initState() {
     super.initState();
-    _checkTutorialStatus();
+
+    _pulseController = AnimationController(
+      vsync: this,
+      duration: const Duration(milliseconds: 1200),
+    );
+
+    // Gentle bounce: slides 0 → 10px → 0, loops
+    _pulseAnim = Tween<double>(begin: 0, end: 10).animate(
+      CurvedAnimation(parent: _pulseController, curve: Curves.easeInOut),
+    );
+
+    _pulseController.addStatusListener((status) {
+      if (status == AnimationStatus.completed) {
+        _pulseController.reverse();
+      } else if (status == AnimationStatus.dismissed && _hasPaymentPending) {
+        _pulseController.forward();
+      }
+    });
   }
 
   @override
   void dispose() {
+    _pulseController.dispose();
     _pageController.dispose();
     super.dispose();
-  }
-
-  Future<void> _checkTutorialStatus() async {
-    final prefs = await SharedPreferences.getInstance();
-    final dontShow = prefs.getBool('swipe_tutorial_dismissed') ?? false;
-    final orderCount = prefs.getInt('user_order_count') ?? 0;
-
-    setState(() {
-      _orderCount = orderCount;
-      // Show tutorial if not dismissed AND order count <= 2
-      _showTutorial = !dontShow && orderCount <= 2;
-    });
-  }
-
-  Future<void> _dismissTutorial({bool permanently = false}) async {
-    if (permanently) {
-      final prefs = await SharedPreferences.getInstance();
-      await prefs.setBool('swipe_tutorial_dismissed', true);
-    }
-    setState(() {
-      _showTutorial = false;
-      _dontShowAgain = false;
-    });
   }
 
   void _onPageChanged(int page) {
     setState(() => _currentPage = page);
   }
 
+  /// Called every time the orders stream emits. We check if any order is at
+  /// 'price_confirmed' — meaning the admin has set a price and the user needs
+  /// to go to the payment screen to review/confirm it.
+  void _updatePaymentState(List<Map<String, dynamic>> orders) {
+    final hasPending = orders.any((o) => o['status'] == 'price_confirmed');
+
+    if (hasPending == _hasPaymentPending) return; // nothing changed
+
+    setState(() => _hasPaymentPending = hasPending);
+
+    if (hasPending) {
+      _pulseController.forward();
+    } else {
+      _pulseController.stop();
+      _pulseController.reset();
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
+    final userId = supabase.auth.currentUser?.id;
+
     return Scaffold(
       body: Stack(
         children: [
-          // Page View for swipe navigation
+          // ── Page View ──────────────────────────────────────────────────
           PageView(
             controller: _pageController,
             onPageChanged: _onPageChanged,
             physics: const BouncingScrollPhysics(),
             children: const [
-              PaymentScreen(), // Page 0 (Left)
-              HomeScreen(), // Page 1 (Center/Default)
+              PaymentScreen(), // Page 0 — left
+              HomeScreen(), // Page 1 — default / center
             ],
           ),
 
-          // Swipe Indicator Arrow (on Home screen)
-          if (_currentPage == 1)
-            Positioned(
-              top: MediaQuery.of(context).padding.top + 70,
-              left: 0,
-              child: _buildSwipeHintArrow(context),
+          // ── Orders stream (invisible — just drives arrow animation) ───
+          if (userId != null)
+            StreamBuilder<List<Map<String, dynamic>>>(
+              stream: supabase
+                  .from('orders')
+                  .stream(primaryKey: ['id'])
+                  .eq('user_id', userId),
+              builder: (context, snapshot) {
+                if (snapshot.hasData) {
+                  // Schedule after current frame so no setState-during-build
+                  WidgetsBinding.instance.addPostFrameCallback((_) {
+                    _updatePaymentState(snapshot.data!);
+                  });
+                }
+                return const SizedBox.shrink(); // renders nothing
+              },
             ),
 
-          // Tutorial Overlay
-          if (_showTutorial && _currentPage == 1)
-            _buildTutorialOverlay(context),
+          // ── Payment hint arrow (only on Home screen) ──────────────────
+          if (_currentPage == 1)
+            Positioned(
+              // Bottom-left edge — well clear of all home screen content
+              bottom: 120,
+              left: 0,
+              child: _buildPaymentArrow(context),
+            ),
         ],
       ),
     );
   }
 
-  Widget _buildSwipeHintArrow(BuildContext context) {
+  Widget _buildPaymentArrow(BuildContext context) {
     final isDark = Theme.of(context).brightness == Brightness.dark;
 
-    return GestureDetector(
-      onTap: () {
-        _pageController.animateToPage(
-          0,
-          duration: const Duration(milliseconds: 400),
-          curve: Curves.easeInOut,
-        );
-      },
-      child: TweenAnimationBuilder<double>(
-        tween: Tween(begin: 0, end: 1),
-        duration: const Duration(seconds: 2),
-        builder: (context, value, child) {
-          // Loop animation
-          final offset = (value <= 0.5 ? value * 2 : 2 - value * 2) * 8;
+    // When there's a payment pending: full opacity + bouncing animation.
+    // When idle: barely visible, static — just enough to be discoverable.
+    final double opacity = _hasPaymentPending ? 0.85 : 0.15;
 
-          return Transform.translate(
-            offset: Offset(offset, 0),
-            child: Container(
-              padding: const EdgeInsets.fromLTRB(8, 12, 14, 12),
-              decoration: BoxDecoration(
-                color: isDark
-                    ? Colors.teal.shade800.withOpacity(0.5)
-                    : Colors.teal.shade600,
-                borderRadius: const BorderRadius.only(
-                  topRight: Radius.circular(20),
-                  bottomRight: Radius.circular(20),
-                ),
-                boxShadow: [
-                  BoxShadow(
-                    color: Colors.teal.shade400.withOpacity(0.3),
-                    blurRadius: 12,
-                    offset: const Offset(2, 2),
-                  ),
-                ],
+    return GestureDetector(
+      onTap: () => _pageController.animateToPage(
+        0,
+        duration: const Duration(milliseconds: 400),
+        curve: Curves.easeInOut,
+      ),
+      child: AnimatedOpacity(
+        opacity: opacity,
+        duration: const Duration(milliseconds: 600),
+        child: AnimatedBuilder(
+          animation: _pulseAnim,
+          builder: (context, child) {
+            // Bounce rightward when payment is pending, static otherwise
+            final dx = _hasPaymentPending ? _pulseAnim.value : 0.0;
+            return Transform.translate(offset: Offset(dx, 0), child: child);
+          },
+          child: Container(
+            padding: const EdgeInsets.fromLTRB(6, 10, 10, 10),
+            decoration: BoxDecoration(
+              // Subtle pill tab on the left edge
+              color: isDark
+                  ? Colors.teal.shade800.withOpacity(0.9)
+                  : Colors.teal.shade600,
+              borderRadius: const BorderRadius.only(
+                topRight: Radius.circular(16),
+                bottomRight: Radius.circular(16),
               ),
-              child: Row(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  Icon(
-                    Icons.payments_rounded,
-                    color: Colors.white.withOpacity(0.9),
-                    size: 18,
-                  ),
-                  const SizedBox(width: 4),
+              boxShadow: _hasPaymentPending
+                  ? [
+                      BoxShadow(
+                        color: Colors.teal.shade400.withOpacity(0.4),
+                        blurRadius: 10,
+                        offset: const Offset(2, 0),
+                      ),
+                    ]
+                  : [],
+            ),
+            child: Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Icon(
+                  // Shows a badge-style indicator when payment is pending
+                  _hasPaymentPending
+                      ? Icons.payments_rounded
+                      : Icons.chevron_right_rounded,
+                  color: Colors.white,
+                  size: 16,
+                ),
+                if (_hasPaymentPending) ...[
+                  const SizedBox(width: 2),
                   const Icon(
                     Icons.chevron_right_rounded,
                     color: Colors.white,
-                    size: 20,
+                    size: 16,
                   ),
                 ],
-              ),
+              ],
             ),
-          );
-        },
-        onEnd: () {
-          // Restart animation
-          setState(() {});
-        },
-      ),
-    );
-  }
-
-  Widget _buildTutorialOverlay(BuildContext context) {
-    // ignore: unused_local_variable
-    final isDark = Theme.of(context).brightness == Brightness.dark;
-
-    return GestureDetector(
-      onTap: () => _dismissTutorial(),
-      onHorizontalDragEnd: (details) {
-        if (details.primaryVelocity != null && details.primaryVelocity! > 300) {
-          _dismissTutorial();
-          _pageController.animateToPage(
-            0,
-            duration: const Duration(milliseconds: 400),
-            curve: Curves.easeInOut,
-          );
-        }
-      },
-      child: Container(
-        color: Colors.black.withOpacity(0.7),
-        child: SafeArea(
-          child: Stack(
-            children: [
-              // Main content
-              Center(
-                child: Padding(
-                  padding: const EdgeInsets.all(40),
-                  child: Column(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      // Swipe Animation
-                      TweenAnimationBuilder<double>(
-                        tween: Tween(begin: 0, end: 1),
-                        duration: const Duration(milliseconds: 1500),
-                        builder: (context, value, child) {
-                          final slideValue = (value <= 0.5
-                              ? value * 2
-                              : 2 - value * 2);
-                          return Transform.translate(
-                            offset: Offset(slideValue * 40, 0),
-                            child: Container(
-                              width: 80,
-                              height: 80,
-                              decoration: BoxDecoration(
-                                color: Colors.teal.shade500,
-                                shape: BoxShape.circle,
-                                boxShadow: [
-                                  BoxShadow(
-                                    color: Colors.teal.withOpacity(0.4),
-                                    blurRadius: 20,
-                                    spreadRadius: 5,
-                                  ),
-                                ],
-                              ),
-                              child: const Icon(
-                                Icons.swipe_right_rounded,
-                                color: Colors.white,
-                                size: 40,
-                              ),
-                            ),
-                          );
-                        },
-                        onEnd: () => setState(() {}),
-                      ),
-
-                      const SizedBox(height: 30),
-
-                      const Text(
-                        'Swipe Right for Payments',
-                        style: TextStyle(
-                          fontSize: 22,
-                          fontWeight: FontWeight.w700,
-                          color: Colors.white,
-                        ),
-                      ),
-
-                      const SizedBox(height: 12),
-
-                      Text(
-                        'Access your payment details and delivery codes by swiping from left to right',
-                        textAlign: TextAlign.center,
-                        style: TextStyle(
-                          fontSize: 15,
-                          color: Colors.white.withOpacity(0.7),
-                          height: 1.5,
-                        ),
-                      ),
-
-                      const SizedBox(height: 40),
-
-                      // Don't show again checkbox
-                      GestureDetector(
-                        onTap: () {
-                          setState(() => _dontShowAgain = !_dontShowAgain);
-                        },
-                        child: Row(
-                          mainAxisAlignment: MainAxisAlignment.center,
-                          children: [
-                            Container(
-                              width: 22,
-                              height: 22,
-                              decoration: BoxDecoration(
-                                color: _dontShowAgain
-                                    ? Colors.teal.shade500
-                                    : Colors.transparent,
-                                borderRadius: BorderRadius.circular(6),
-                                border: Border.all(
-                                  color: _dontShowAgain
-                                      ? Colors.teal.shade500
-                                      : Colors.white.withOpacity(0.5),
-                                  width: 2,
-                                ),
-                              ),
-                              child: _dontShowAgain
-                                  ? const Icon(
-                                      Icons.check_rounded,
-                                      size: 16,
-                                      color: Colors.white,
-                                    )
-                                  : null,
-                            ),
-                            const SizedBox(width: 10),
-                            Text(
-                              'Don\'t show this again',
-                              style: TextStyle(
-                                fontSize: 14,
-                                color: Colors.white.withOpacity(0.8),
-                              ),
-                            ),
-                          ],
-                        ),
-                      ),
-
-                      const SizedBox(height: 30),
-
-                      // Got it button
-                      SizedBox(
-                        width: 200,
-                        height: 50,
-                        child: ElevatedButton(
-                          onPressed: () =>
-                              _dismissTutorial(permanently: _dontShowAgain),
-                          style: ElevatedButton.styleFrom(
-                            backgroundColor: Colors.teal.shade500,
-                            foregroundColor: Colors.white,
-                            elevation: 0,
-                            shape: RoundedRectangleBorder(
-                              borderRadius: BorderRadius.circular(14),
-                            ),
-                          ),
-                          child: const Text(
-                            'Got it!',
-                            style: TextStyle(
-                              fontSize: 16,
-                              fontWeight: FontWeight.w600,
-                            ),
-                          ),
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
-              ),
-
-              // Tap anywhere hint
-              Positioned(
-                bottom: 30,
-                left: 0,
-                right: 0,
-                child: Center(
-                  child: Text(
-                    'Tap anywhere to dismiss',
-                    style: TextStyle(
-                      fontSize: 12,
-                      color: Colors.white.withOpacity(0.4),
-                    ),
-                  ),
-                ),
-              ),
-            ],
           ),
         ),
       ),
