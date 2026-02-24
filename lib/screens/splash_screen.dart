@@ -1,8 +1,9 @@
 import 'package:flutter/material.dart';
 import '../constants.dart';
 import 'role_selection_screen.dart';
-import '../user_screens/home_screen.dart';
+//import '../user_screens/home_screen.dart';
 import '../services/auth_service.dart';
+import '../user_screens/main_navigation.dart';
 
 class SplashScreen extends StatefulWidget {
   const SplashScreen({super.key});
@@ -62,7 +63,7 @@ class _SplashScreenState extends State<SplashScreen>
 
         Widget destination;
         if (loggedIn) {
-          destination = const HomeScreen();
+          destination = const MainNavigation();
         } else {
           destination = const RoleSelectionScreen();
         }
@@ -119,7 +120,7 @@ class _SplashScreenState extends State<SplashScreen>
                     ),
                     const SizedBox(height: 10),
                     Text(
-                      'Medicine, delivered.',
+                      'Project by Harish & Diva.',
                       style: TextStyle(
                         fontSize: 16,
                         fontWeight: FontWeight.w400,

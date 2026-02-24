@@ -1,9 +1,10 @@
 import 'package:flutter/material.dart';
-import '../main.dart'; // To access supabase
+import '../main.dart';
 import '../services/preferences_service.dart';
 import 'upload_prescription_screen.dart';
 import 'orders_screen.dart';
 import 'profile/profile_screen.dart';
+import 'order_tracking_popup.dart';
 
 class HomeScreen extends StatefulWidget {
   const HomeScreen({super.key});
@@ -31,7 +32,7 @@ class _HomeScreenState extends State<HomeScreen> {
             children: [
               const SizedBox(height: 20),
 
-              // Top bar: Greeting + Profile icon
+              // Top bar
               Row(
                 mainAxisAlignment: MainAxisAlignment.spaceBetween,
                 children: [
@@ -60,16 +61,11 @@ class _HomeScreenState extends State<HomeScreen> {
                       ),
                     ],
                   ),
-                  // Profile avatar
                   GestureDetector(
-                    onTap: () {
-                      Navigator.push(
-                        context,
-                        MaterialPageRoute(
-                          builder: (_) => const ProfileScreen(),
-                        ),
-                      );
-                    },
+                    onTap: () => Navigator.push(
+                      context,
+                      MaterialPageRoute(builder: (_) => const ProfileScreen()),
+                    ),
                     child: Container(
                       width: 44,
                       height: 44,
@@ -96,16 +92,14 @@ class _HomeScreenState extends State<HomeScreen> {
 
               const SizedBox(height: 32),
 
-              // Hero card: Upload Prescription
+              // Hero card
               GestureDetector(
-                onTap: () {
-                  Navigator.push(
-                    context,
-                    MaterialPageRoute(
-                      builder: (_) => const UploadPrescriptionScreen(),
-                    ),
-                  );
-                },
+                onTap: () => Navigator.push(
+                  context,
+                  MaterialPageRoute(
+                    builder: (_) => const UploadPrescriptionScreen(),
+                  ),
+                ),
                 child: Container(
                   width: double.infinity,
                   padding: const EdgeInsets.all(28),
@@ -186,7 +180,7 @@ class _HomeScreenState extends State<HomeScreen> {
 
               const SizedBox(height: 28),
 
-              // Section header: Recent Orders
+              // Recent Orders Header
               Row(
                 mainAxisAlignment: MainAxisAlignment.spaceBetween,
                 children: [
@@ -199,12 +193,10 @@ class _HomeScreenState extends State<HomeScreen> {
                     ),
                   ),
                   GestureDetector(
-                    onTap: () {
-                      Navigator.push(
-                        context,
-                        MaterialPageRoute(builder: (_) => const OrdersScreen()),
-                      );
-                    },
+                    onTap: () => Navigator.push(
+                      context,
+                      MaterialPageRoute(builder: (_) => const OrdersScreen()),
+                    ),
                     child: Text(
                       'See all',
                       style: TextStyle(
@@ -219,7 +211,7 @@ class _HomeScreenState extends State<HomeScreen> {
 
               const SizedBox(height: 16),
 
-              // Real-time orders list
+              // Real-time orders
               Expanded(child: _buildRealtimeOrders(isDark)),
             ],
           ),
@@ -230,10 +222,7 @@ class _HomeScreenState extends State<HomeScreen> {
 
   Widget _buildRealtimeOrders(bool isDark) {
     final userId = supabase.auth.currentUser?.id;
-
-    if (userId == null) {
-      return _buildEmptyState(isDark);
-    }
+    if (userId == null) return _buildEmptyState(isDark);
 
     return StreamBuilder<List<Map<String, dynamic>>>(
       stream: supabase
@@ -241,9 +230,8 @@ class _HomeScreenState extends State<HomeScreen> {
           .stream(primaryKey: ['id'])
           .eq('user_id', userId)
           .order('created_at', ascending: false)
-          .limit(5), // Show only recent 5
+          .limit(5),
       builder: (context, snapshot) {
-        // Loading state
         if (snapshot.connectionState == ConnectionState.waiting) {
           return Center(
             child: CircularProgressIndicator(
@@ -253,7 +241,6 @@ class _HomeScreenState extends State<HomeScreen> {
           );
         }
 
-        // Error state
         if (snapshot.hasError) {
           return Center(
             child: Column(
@@ -275,21 +262,14 @@ class _HomeScreenState extends State<HomeScreen> {
         }
 
         final orders = snapshot.data ?? [];
+        if (orders.isEmpty) return _buildEmptyState(isDark);
 
-        // Empty state
-        if (orders.isEmpty) {
-          return _buildEmptyState(isDark);
-        }
-
-        // Orders list
         return ListView.separated(
           physics: const BouncingScrollPhysics(),
           itemCount: orders.length,
           separatorBuilder: (_, __) => const SizedBox(height: 12),
-          itemBuilder: (context, index) {
-            final order = orders[index];
-            return _buildOrderCard(order, isDark);
-          },
+          itemBuilder: (context, index) =>
+              _buildOrderCard(orders[index], isDark),
         );
       },
     );
@@ -340,12 +320,12 @@ class _HomeScreenState extends State<HomeScreen> {
   Widget _buildOrderCard(Map<String, dynamic> order, bool isDark) {
     final status = order['status'] ?? 'pending';
     final pharmacyName = order['pharmacy_name'] ?? 'Pharmacy';
+    final orderName = order['order_name'] ?? 'My Order';
     final totalPrice = order['total_price'] ?? 0.0;
     final createdAt = order['created_at'] != null
         ? DateTime.parse(order['created_at'])
         : DateTime.now();
 
-    // Format date
     final months = [
       'Jan',
       'Feb',
@@ -361,110 +341,116 @@ class _HomeScreenState extends State<HomeScreen> {
       'Dec',
     ];
     final dateStr = '${months[createdAt.month - 1]} ${createdAt.day}';
-
-    // Status styling
     final statusConfig = _getStatusConfig(status);
 
-    return Container(
-      padding: const EdgeInsets.all(16),
-      decoration: BoxDecoration(
-        color: isDark ? const Color(0xFF1E1E1E) : const Color(0xFFF8F9FA),
-        borderRadius: BorderRadius.circular(16),
-      ),
-      child: Row(
-        children: [
-          Container(
-            width: 44,
-            height: 44,
-            decoration: BoxDecoration(
-              color: statusConfig['color'].withOpacity(0.1),
-              borderRadius: BorderRadius.circular(12),
+    return GestureDetector(
+      onTap: () => OrderTrackingPopup.show(context, order),
+      child: Container(
+        padding: const EdgeInsets.all(16),
+        decoration: BoxDecoration(
+          color: isDark ? const Color(0xFF1E1E1E) : const Color(0xFFF8F9FA),
+          borderRadius: BorderRadius.circular(16),
+        ),
+        child: Row(
+          children: [
+            Container(
+              width: 44,
+              height: 44,
+              decoration: BoxDecoration(
+                color: (statusConfig['color'] as Color).withOpacity(0.1),
+                borderRadius: BorderRadius.circular(12),
+              ),
+              child: Icon(
+                statusConfig['icon'] as IconData,
+                color: statusConfig['color'] as Color,
+                size: 22,
+              ),
             ),
-            child: Icon(
-              statusConfig['icon'],
-              color: statusConfig['color'],
-              size: 22,
+            const SizedBox(width: 14),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    orderName,
+                    style: TextStyle(
+                      fontSize: 15,
+                      fontWeight: FontWeight.w600,
+                      color: isDark ? Colors.white : const Color(0xFF1A1A1A),
+                    ),
+                  ),
+                  const SizedBox(height: 4),
+                  Text(
+                    '$pharmacyName  •  $dateStr',
+                    style: TextStyle(
+                      fontSize: 13,
+                      color: isDark
+                          ? Colors.grey.shade400
+                          : Colors.grey.shade500,
+                    ),
+                  ),
+                ],
+              ),
             ),
-          ),
-          const SizedBox(width: 14),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
+            Column(
+              crossAxisAlignment: CrossAxisAlignment.end,
               children: [
                 Text(
-                  pharmacyName,
+                  totalPrice > 0
+                      ? 'LKR ${totalPrice.toStringAsFixed(0)}'
+                      : 'Pending',
                   style: TextStyle(
                     fontSize: 15,
-                    fontWeight: FontWeight.w600,
+                    fontWeight: FontWeight.w700,
                     color: isDark ? Colors.white : const Color(0xFF1A1A1A),
                   ),
                 ),
                 const SizedBox(height: 4),
-                Text(
-                  '#${order['id'].toString().substring(0, 8).toUpperCase()}  •  $dateStr',
-                  style: TextStyle(
-                    fontSize: 13,
-                    color: isDark ? Colors.grey.shade400 : Colors.grey.shade500,
+                Container(
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 8,
+                    vertical: 3,
+                  ),
+                  decoration: BoxDecoration(
+                    color: (statusConfig['color'] as Color).withOpacity(0.1),
+                    borderRadius: BorderRadius.circular(6),
+                  ),
+                  child: Text(
+                    statusConfig['label'] as String,
+                    style: TextStyle(
+                      fontSize: 11,
+                      fontWeight: FontWeight.w600,
+                      color: statusConfig['color'] as Color,
+                    ),
                   ),
                 ),
               ],
             ),
-          ),
-          Column(
-            crossAxisAlignment: CrossAxisAlignment.end,
-            children: [
-              Text(
-                totalPrice > 0
-                    ? 'Rs. ${totalPrice.toStringAsFixed(0)}'
-                    : 'Pending',
-                style: TextStyle(
-                  fontSize: 15,
-                  fontWeight: FontWeight.w700,
-                  color: isDark ? Colors.white : const Color(0xFF1A1A1A),
-                ),
-              ),
-              const SizedBox(height: 4),
-              Container(
-                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
-                decoration: BoxDecoration(
-                  color: statusConfig['color'].withOpacity(0.1),
-                  borderRadius: BorderRadius.circular(6),
-                ),
-                child: Text(
-                  statusConfig['label'],
-                  style: TextStyle(
-                    fontSize: 11,
-                    fontWeight: FontWeight.w600,
-                    color: statusConfig['color'],
-                  ),
-                ),
-              ),
-            ],
-          ),
-        ],
+          ],
+        ),
       ),
     );
   }
 
   Map<String, dynamic> _getStatusConfig(String status) {
-    switch (status.toLowerCase()) {
-      case 'pending_review':
+    switch (status) {
+      case 'order_placed':
         return {
-          'label': 'Pending Review',
-          'color': Colors.orange,
-          'icon': Icons.hourglass_empty_rounded,
-        };
-      case 'price_ready':
-        return {
-          'label': 'Price Ready',
+          'label': 'Order Placed',
           'color': Colors.blue,
           'icon': Icons.receipt_rounded,
         };
-      case 'confirmed':
+      case 'pharmacist_verified':
         return {
-          'label': 'Confirmed',
+          'label': 'Verified',
           'color': Colors.purple,
-          'icon': Icons.check_circle_rounded,
+          'icon': Icons.verified_rounded,
+        };
+      case 'price_confirmed':
+        return {
+          'label': 'Price Ready',
+          'color': Colors.orange,
+          'icon': Icons.attach_money_rounded,
         };
       case 'preparing':
         return {

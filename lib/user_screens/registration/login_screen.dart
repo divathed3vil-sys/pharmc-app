@@ -1,8 +1,9 @@
 import 'package:flutter/material.dart';
 import '../../constants.dart';
 import '../../services/auth_service.dart';
-import '../home_screen.dart';
+//import '../home_screen.dart';
 import 'email_verification_screen.dart';
+import '../main_navigation.dart';
 
 class LoginScreen extends StatefulWidget {
   const LoginScreen({super.key});
@@ -64,10 +65,10 @@ class _LoginScreenState extends State<LoginScreen> {
     });
 
     if (result.success) {
-      // Go to home
+      // Go to main navigation screen
       Navigator.pushAndRemoveUntil(
         context,
-        MaterialPageRoute(builder: (_) => const HomeScreen()),
+        MaterialPageRoute(builder: (_) => const MainNavigation()),
         (route) => false,
       );
     } else if (result.needsVerification) {
