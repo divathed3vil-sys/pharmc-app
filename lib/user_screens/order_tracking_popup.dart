@@ -36,21 +36,13 @@ class OrderTrackingPopup extends StatefulWidget {
 }
 
 class _OrderTrackingPopupState extends State<OrderTrackingPopup> {
-  // View switcher — 0 = tracking, 1 = prescriptions
-  // Using a PageController so both views slide inside a fixed-size container.
-  // This is the key fix for the broken swipe: AnimatedSwitcher was re-rendering
-  // both widgets simultaneously and resizing the container. PageView keeps the
-  // container locked and handles the slide entirely within it.
   final PageController _viewController = PageController();
-
-  // Separate PageController for swiping between prescription images
   final PageController _imagePageController = PageController();
   int _currentImagePage = 0;
 
   List<Map<String, dynamic>> _prescriptionImages = [];
   bool _loadingImages = false;
 
-  // Per-image TransformationControllers for the zoom buttons
   final Map<int, TransformationController> _zoomControllers = {};
 
   @override
@@ -69,7 +61,6 @@ class _OrderTrackingPopupState extends State<OrderTrackingPopup> {
     super.dispose();
   }
 
-  // Returns (or lazily creates) the TransformationController for image at [index]
   TransformationController _zoomFor(int index) {
     return _zoomControllers.putIfAbsent(
       index,
@@ -80,10 +71,8 @@ class _OrderTrackingPopupState extends State<OrderTrackingPopup> {
   void _zoomIn(int index) {
     final controller = _zoomFor(index);
     final current = controller.value;
-    // Read the current scale from the matrix diagonal
     final currentScale = current.getMaxScaleOnAxis();
     final newScale = (currentScale * 1.4).clamp(1.0, 4.0);
-    // Scale around the center of the widget
     controller.value = Matrix4.identity()..scale(newScale);
   }
 
@@ -162,12 +151,6 @@ class _OrderTrackingPopupState extends State<OrderTrackingPopup> {
     return null;
   }
 
-  // ─────────────────────────────────────────────────────────────────────────
-  // ROOT BUILD
-  // The yellow-underline bug: showGeneralDialog doesn't inject a Material
-  // widget, so Text falls back to the raw default style (yellow + underline).
-  // Fix: wrap everything in Material(type: transparency).
-  // ─────────────────────────────────────────────────────────────────────────
   @override
   Widget build(BuildContext context) {
     final isDark = Theme.of(context).brightness == Brightness.dark;
@@ -175,24 +158,20 @@ class _OrderTrackingPopupState extends State<OrderTrackingPopup> {
     final popupWidth = MediaQuery.of(context).size.width * 0.9;
 
     return Material(
-      // ← fixes yellow underlines
       type: MaterialType.transparency,
       child: GestureDetector(
         onTap: () => Navigator.pop(context),
         child: Stack(
           children: [
-            // Blurred background
             BackdropFilter(
               filter: ImageFilter.blur(sigmaX: 12, sigmaY: 12),
               child: Container(
                 color: Colors.black.withOpacity(isDark ? 0.6 : 0.4),
               ),
             ),
-
-            // Popup — fixed size so swipe never resizes it
             Center(
               child: GestureDetector(
-                onTap: () {}, // block background-close when tapping inside
+                onTap: () {},
                 onVerticalDragEnd: (d) {
                   if ((d.primaryVelocity ?? 0) > 300) Navigator.pop(context);
                 },
@@ -210,14 +189,11 @@ class _OrderTrackingPopupState extends State<OrderTrackingPopup> {
                       ),
                     ],
                   ),
-                  // PageView replaces AnimatedSwitcher.
-                  // Both views are the same size as the container — no resize,
-                  // no individual elements sliding in the wrong direction.
+                  // FIX: Enable swiping by changing physics
                   child: PageView(
                     controller: _viewController,
-                    physics: const NeverScrollableScrollPhysics(),
-                    // Swipe gestures are handled manually below so they don't
-                    // conflict with the inner prescription image PageView.
+                    physics:
+                        const ClampingScrollPhysics(), // allows horizontal swipe
                     children: [
                       _buildTrackingView(isDark),
                       _buildPrescriptionView(isDark),
@@ -232,9 +208,6 @@ class _OrderTrackingPopupState extends State<OrderTrackingPopup> {
     );
   }
 
-  // ─────────────────────────────────────────────────────────────────────────
-  // TRACKING VIEW
-  // ─────────────────────────────────────────────────────────────────────────
   Widget _buildTrackingView(bool isDark) {
     final textColor = isDark ? Colors.white : const Color(0xFF1A1A1A);
     final subtextColor = isDark ? Colors.grey.shade400 : Colors.grey.shade500;
@@ -250,413 +223,373 @@ class _OrderTrackingPopupState extends State<OrderTrackingPopup> {
     final totalPrice = (widget.order['total_price'] as num?)?.toDouble() ?? 0.0;
     final paymentMethod = widget.order['payment_method'] ?? 'cash';
 
-    return GestureDetector(
-      onHorizontalDragEnd: (d) {
-        if ((d.primaryVelocity ?? 0) < -300) _switchToPrescriptions();
-      },
-      child: SingleChildScrollView(
-        physics: const BouncingScrollPhysics(),
-        padding: const EdgeInsets.all(24),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            // ── Top bar ──────────────────────────────────────────────────
-            Row(
-              mainAxisAlignment: MainAxisAlignment.spaceBetween,
-              children: [
-                Container(
-                  width: 40,
-                  height: 4,
-                  decoration: BoxDecoration(
-                    color: Colors.grey.shade400,
-                    borderRadius: BorderRadius.circular(2),
-                  ),
+    return SingleChildScrollView(
+      physics: const BouncingScrollPhysics(),
+      padding: const EdgeInsets.all(24),
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              Container(
+                width: 40,
+                height: 4,
+                decoration: BoxDecoration(
+                  color: Colors.grey.shade400,
+                  borderRadius: BorderRadius.circular(2),
                 ),
-                GestureDetector(
-                  onTap: () => Navigator.pop(context),
-                  child: Container(
-                    width: 32,
-                    height: 32,
-                    decoration: BoxDecoration(
-                      color: isDark
-                          ? Colors.grey.shade800
-                          : Colors.grey.shade200,
-                      shape: BoxShape.circle,
-                    ),
-                    child: Icon(
-                      Icons.close_rounded,
-                      size: 18,
-                      color: isDark
-                          ? Colors.grey.shade400
-                          : Colors.grey.shade600,
-                    ),
-                  ),
-                ),
-              ],
-            ),
-
-            const SizedBox(height: 20),
-
-            // ── Order name + ID ──────────────────────────────────────────
-            Text(
-              orderName,
-              style: TextStyle(
-                fontSize: 22,
-                fontWeight: FontWeight.w700,
-                color: textColor,
               ),
-            ),
-            const SizedBox(height: 4),
-            Row(
-              children: [
-                Text(
-                  '#ORD-$orderId',
-                  style: TextStyle(
-                    fontSize: 13,
-                    color: subtextColor,
-                    letterSpacing: 0.5,
+              GestureDetector(
+                onTap: () => Navigator.pop(context),
+                child: Container(
+                  width: 32,
+                  height: 32,
+                  decoration: BoxDecoration(
+                    color: isDark ? Colors.grey.shade800 : Colors.grey.shade200,
+                    shape: BoxShape.circle,
                   ),
+                  child: Icon(
+                    Icons.close_rounded,
+                    size: 18,
+                    color: isDark ? Colors.grey.shade400 : Colors.grey.shade600,
+                  ),
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 20),
+          Text(
+            orderName,
+            style: TextStyle(
+              fontSize: 22,
+              fontWeight: FontWeight.w700,
+              color: textColor,
+            ),
+          ),
+          const SizedBox(height: 4),
+          Row(
+            children: [
+              Text(
+                '#ORD-$orderId',
+                style: TextStyle(
+                  fontSize: 13,
+                  color: subtextColor,
+                  letterSpacing: 0.5,
+                ),
+              ),
+              const SizedBox(width: 10),
+              Container(
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 10,
+                  vertical: 4,
+                ),
+                decoration: BoxDecoration(
+                  color: (statusConfig['color'] as Color).withOpacity(0.1),
+                  borderRadius: BorderRadius.circular(8),
+                ),
+                child: Text(
+                  statusConfig['label'] as String,
+                  style: TextStyle(
+                    fontSize: 11,
+                    fontWeight: FontWeight.w600,
+                    color: statusConfig['color'] as Color,
+                  ),
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 20),
+          Container(
+            width: double.infinity,
+            padding: const EdgeInsets.all(14),
+            decoration: BoxDecoration(
+              color: cardBg,
+              borderRadius: BorderRadius.circular(12),
+            ),
+            child: Row(
+              children: [
+                Icon(
+                  Icons.local_pharmacy_rounded,
+                  size: 20,
+                  color: Colors.teal.shade600,
                 ),
                 const SizedBox(width: 10),
-                Container(
-                  padding: const EdgeInsets.symmetric(
-                    horizontal: 10,
-                    vertical: 4,
-                  ),
-                  decoration: BoxDecoration(
-                    color: (statusConfig['color'] as Color).withOpacity(0.1),
-                    borderRadius: BorderRadius.circular(8),
-                  ),
+                Expanded(
                   child: Text(
-                    statusConfig['label'] as String,
+                    pharmacyName,
                     style: TextStyle(
-                      fontSize: 11,
+                      fontSize: 14,
                       fontWeight: FontWeight.w600,
-                      color: statusConfig['color'] as Color,
+                      color: textColor,
+                    ),
+                  ),
+                ),
+                Icon(Icons.payments_rounded, size: 16, color: subtextColor),
+                const SizedBox(width: 4),
+                Text(
+                  paymentMethod == 'cash' ? 'COD' : 'Card',
+                  style: TextStyle(fontSize: 12, color: subtextColor),
+                ),
+              ],
+            ),
+          ),
+          const SizedBox(height: 20),
+          Text(
+            'Order Progress',
+            style: TextStyle(
+              fontSize: 14,
+              fontWeight: FontWeight.w600,
+              color: subtextColor,
+            ),
+          ),
+          const SizedBox(height: 12),
+          ...steps.asMap().entries.map((entry) {
+            final step = entry.value;
+            final isDone = step['done'] as bool;
+            final isCurrent = step['isCurrent'] as bool;
+            final isLast = entry.key == steps.length - 1;
+
+            return Row(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Column(
+                  children: [
+                    Container(
+                      width: 26,
+                      height: 26,
+                      decoration: BoxDecoration(
+                        color: isDone
+                            ? (isCurrent
+                                  ? Colors.teal.shade600
+                                  : Colors.teal.shade100)
+                            : (isDark
+                                  ? Colors.grey.shade800
+                                  : Colors.grey.shade200),
+                        shape: BoxShape.circle,
+                        border: isCurrent
+                            ? Border.all(color: Colors.teal.shade300, width: 2)
+                            : null,
+                      ),
+                      child: isDone
+                          ? Icon(
+                              isCurrent
+                                  ? Icons.radio_button_checked_rounded
+                                  : Icons.check_rounded,
+                              size: 14,
+                              color: isCurrent
+                                  ? Colors.white
+                                  : Colors.teal.shade700,
+                            )
+                          : null,
+                    ),
+                    if (!isLast)
+                      Container(
+                        width: 2,
+                        height: 28,
+                        color: isDone
+                            ? Colors.teal.shade200
+                            : (isDark
+                                  ? Colors.grey.shade800
+                                  : Colors.grey.shade200),
+                      ),
+                  ],
+                ),
+                const SizedBox(width: 14),
+                Padding(
+                  padding: const EdgeInsets.only(top: 3),
+                  child: Text(
+                    step['label'] as String,
+                    style: TextStyle(
+                      fontSize: 14,
+                      fontWeight: isCurrent ? FontWeight.w700 : FontWeight.w400,
+                      color: isDone
+                          ? (isCurrent ? Colors.teal.shade700 : textColor)
+                          : (isDark
+                                ? Colors.grey.shade600
+                                : Colors.grey.shade400),
                     ),
                   ),
                 ),
               ],
+            );
+          }),
+          const SizedBox(height: 20),
+          _buildVerificationSection(
+            verificationCode,
+            isDark,
+            textColor,
+            subtextColor,
+            cardBg,
+          ),
+          const SizedBox(height: 20),
+          Container(
+            width: double.infinity,
+            padding: const EdgeInsets.all(16),
+            decoration: BoxDecoration(
+              color: cardBg,
+              borderRadius: BorderRadius.circular(12),
             ),
-
-            const SizedBox(height: 20),
-
-            // ── Pharmacy row ─────────────────────────────────────────────
-            Container(
-              width: double.infinity,
-              padding: const EdgeInsets.all(14),
-              decoration: BoxDecoration(
-                color: cardBg,
-                borderRadius: BorderRadius.circular(12),
-              ),
-              child: Row(
-                children: [
-                  Icon(
-                    Icons.local_pharmacy_rounded,
-                    size: 20,
-                    color: Colors.teal.shade600,
-                  ),
-                  const SizedBox(width: 10),
-                  Expanded(
-                    child: Text(
-                      pharmacyName,
-                      style: TextStyle(
-                        fontSize: 14,
-                        fontWeight: FontWeight.w600,
-                        color: textColor,
-                      ),
-                    ),
-                  ),
-                  Icon(Icons.payments_rounded, size: 16, color: subtextColor),
-                  const SizedBox(width: 4),
-                  Text(
-                    paymentMethod == 'cash' ? 'COD' : 'Card',
-                    style: TextStyle(fontSize: 12, color: subtextColor),
-                  ),
-                ],
-              ),
-            ),
-
-            const SizedBox(height: 20),
-
-            // ── Tracking timeline ────────────────────────────────────────
-            Text(
-              'Order Progress',
-              style: TextStyle(
-                fontSize: 14,
-                fontWeight: FontWeight.w600,
-                color: subtextColor,
-              ),
-            ),
-            const SizedBox(height: 12),
-
-            ...steps.asMap().entries.map((entry) {
-              final step = entry.value;
-              final isDone = step['done'] as bool;
-              final isCurrent = step['isCurrent'] as bool;
-              final isLast = entry.key == steps.length - 1;
-
-              return Row(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Column(
-                    children: [
-                      Container(
-                        width: 26,
-                        height: 26,
-                        decoration: BoxDecoration(
-                          color: isDone
-                              ? (isCurrent
-                                    ? Colors.teal.shade600
-                                    : Colors.teal.shade100)
-                              : (isDark
-                                    ? Colors.grey.shade800
-                                    : Colors.grey.shade200),
-                          shape: BoxShape.circle,
-                          border: isCurrent
-                              ? Border.all(
-                                  color: Colors.teal.shade300,
-                                  width: 2,
-                                )
-                              : null,
-                        ),
-                        child: isDone
-                            ? Icon(
-                                isCurrent
-                                    ? Icons.radio_button_checked_rounded
-                                    : Icons.check_rounded,
-                                size: 14,
-                                color: isCurrent
-                                    ? Colors.white
-                                    : Colors.teal.shade700,
-                              )
-                            : null,
-                      ),
-                      if (!isLast)
-                        Container(
-                          width: 2,
-                          height: 28,
-                          color: isDone
-                              ? Colors.teal.shade200
-                              : (isDark
-                                    ? Colors.grey.shade800
-                                    : Colors.grey.shade200),
-                        ),
-                    ],
-                  ),
-                  const SizedBox(width: 14),
-                  Padding(
-                    padding: const EdgeInsets.only(top: 3),
-                    child: Text(
-                      step['label'] as String,
-                      style: TextStyle(
-                        fontSize: 14,
-                        fontWeight: isCurrent
-                            ? FontWeight.w700
-                            : FontWeight.w400,
-                        color: isDone
-                            ? (isCurrent ? Colors.teal.shade700 : textColor)
-                            : (isDark
-                                  ? Colors.grey.shade600
-                                  : Colors.grey.shade400),
-                      ),
-                    ),
-                  ),
-                ],
-              );
-            }),
-
-            const SizedBox(height: 20),
-
-            // ── Verification code ────────────────────────────────────────
-            _buildVerificationSection(
-              verificationCode,
-              isDark,
-              textColor,
-              subtextColor,
-              cardBg,
-            ),
-
-            const SizedBox(height: 20),
-
-            // ── Price breakdown ──────────────────────────────────────────
-            Container(
-              width: double.infinity,
-              padding: const EdgeInsets.all(16),
-              decoration: BoxDecoration(
-                color: cardBg,
-                borderRadius: BorderRadius.circular(12),
-              ),
-              child: Column(
-                children: [
-                  if (totalPrice > 0) ...[
-                    Row(
-                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                      children: [
-                        Text(
-                          'Medicine',
-                          style: TextStyle(fontSize: 13, color: subtextColor),
-                        ),
-                        Text(
-                          'LKR ${((widget.order['medicine_cost'] ?? 0.0) as num).toStringAsFixed(2)}',
-                          style: TextStyle(fontSize: 13, color: textColor),
-                        ),
-                      ],
-                    ),
-                    const SizedBox(height: 6),
-                    Row(
-                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                      children: [
-                        Text(
-                          'Delivery',
-                          style: TextStyle(fontSize: 13, color: subtextColor),
-                        ),
-                        Text(
-                          'LKR ${((widget.order['delivery_fee'] ?? 0.0) as num).toStringAsFixed(2)}',
-                          style: TextStyle(fontSize: 13, color: textColor),
-                        ),
-                      ],
-                    ),
-                    Padding(
-                      padding: const EdgeInsets.symmetric(vertical: 10),
-                      child: Divider(
-                        color: isDark
-                            ? Colors.grey.shade700
-                            : Colors.grey.shade300,
-                        height: 1,
-                      ),
-                    ),
-                  ],
+            child: Column(
+              children: [
+                if (totalPrice > 0) ...[
                   Row(
                     mainAxisAlignment: MainAxisAlignment.spaceBetween,
                     children: [
                       Text(
-                        'Total',
-                        style: TextStyle(
-                          fontSize: 15,
-                          fontWeight: FontWeight.w600,
-                          color: textColor,
-                        ),
+                        'Medicine',
+                        style: TextStyle(fontSize: 13, color: subtextColor),
                       ),
                       Text(
-                        totalPrice > 0
-                            ? 'LKR ${totalPrice.toStringAsFixed(2)}'
-                            : 'Pending',
-                        style: TextStyle(
-                          fontSize: 20,
-                          fontWeight: FontWeight.w700,
-                          color: totalPrice > 0
-                              ? Colors.teal.shade600
-                              : Colors.orange.shade600,
-                        ),
+                        'LKR ${((widget.order['medicine_cost'] ?? 0.0) as num).toStringAsFixed(2)}',
+                        style: TextStyle(fontSize: 13, color: textColor),
                       ),
                     ],
                   ),
+                  const SizedBox(height: 6),
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    children: [
+                      Text(
+                        'Delivery',
+                        style: TextStyle(fontSize: 13, color: subtextColor),
+                      ),
+                      Text(
+                        'LKR ${((widget.order['delivery_fee'] ?? 0.0) as num).toStringAsFixed(2)}',
+                        style: TextStyle(fontSize: 13, color: textColor),
+                      ),
+                    ],
+                  ),
+                  Padding(
+                    padding: const EdgeInsets.symmetric(vertical: 10),
+                    child: Divider(
+                      color: isDark
+                          ? Colors.grey.shade700
+                          : Colors.grey.shade300,
+                      height: 1,
+                    ),
+                  ),
                 ],
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  children: [
+                    Text(
+                      'Total',
+                      style: TextStyle(
+                        fontSize: 15,
+                        fontWeight: FontWeight.w600,
+                        color: textColor,
+                      ),
+                    ),
+                    Text(
+                      totalPrice > 0
+                          ? 'LKR ${totalPrice.toStringAsFixed(2)}'
+                          : 'Pending',
+                      style: TextStyle(
+                        fontSize: 20,
+                        fontWeight: FontWeight.w700,
+                        color: totalPrice > 0
+                            ? Colors.teal.shade600
+                            : Colors.orange.shade600,
+                      ),
+                    ),
+                  ],
+                ),
+              ],
+            ),
+          ),
+          if (status == 'price_confirmed') ...[
+            const SizedBox(height: 8),
+            Center(
+              child: TextButton(
+                onPressed: () => Navigator.pop(context),
+                child: Text(
+                  'Reject Price',
+                  style: TextStyle(
+                    color: Colors.red.shade500,
+                    fontWeight: FontWeight.w600,
+                  ),
+                ),
               ),
             ),
-
-            // ── Reject price (only when price_confirmed) ─────────────────
-            if (status == 'price_confirmed') ...[
-              const SizedBox(height: 8),
-              Center(
-                child: TextButton(
-                  onPressed: () => Navigator.pop(context),
-                  child: Text(
-                    'Reject Price',
-                    style: TextStyle(
-                      color: Colors.red.shade500,
-                      fontWeight: FontWeight.w600,
+          ],
+          const SizedBox(height: 20),
+          Row(
+            children: [
+              Expanded(
+                child: SizedBox(
+                  height: 48,
+                  child: OutlinedButton.icon(
+                    onPressed: _switchToPrescriptions,
+                    icon: const Icon(Icons.image_rounded, size: 18),
+                    label: const Text(
+                      'Prescriptions',
+                      style: TextStyle(
+                        fontWeight: FontWeight.w600,
+                        fontSize: 13,
+                      ),
+                    ),
+                    style: OutlinedButton.styleFrom(
+                      foregroundColor: Colors.teal.shade600,
+                      side: BorderSide(color: Colors.teal.shade600),
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(12),
+                      ),
+                    ),
+                  ),
+                ),
+              ),
+              const SizedBox(width: 12),
+              Expanded(
+                child: SizedBox(
+                  height: 48,
+                  child: ElevatedButton.icon(
+                    // FIX: Use root navigator to ensure navigation after dialog is popped
+                    onPressed: () {
+                      Navigator.pop(context);
+                      Navigator.of(context, rootNavigator: true).push(
+                        MaterialPageRoute(
+                          builder: (_) => const PaymentScreen(),
+                        ),
+                      );
+                    },
+                    icon: const Icon(Icons.receipt_long_rounded, size: 18),
+                    label: const Text(
+                      'Payment',
+                      style: TextStyle(
+                        fontWeight: FontWeight.w600,
+                        fontSize: 13,
+                      ),
+                    ),
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: Colors.teal.shade600,
+                      foregroundColor: Colors.white,
+                      elevation: 0,
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(12),
+                      ),
                     ),
                   ),
                 ),
               ),
             ],
-
-            const SizedBox(height: 20),
-
-            // ── Action buttons ───────────────────────────────────────────
-            Row(
-              children: [
-                Expanded(
-                  child: SizedBox(
-                    height: 48,
-                    child: OutlinedButton.icon(
-                      onPressed: _switchToPrescriptions,
-                      icon: const Icon(Icons.image_rounded, size: 18),
-                      label: const Text(
-                        'Prescriptions',
-                        style: TextStyle(
-                          fontWeight: FontWeight.w600,
-                          fontSize: 13,
-                        ),
-                      ),
-                      style: OutlinedButton.styleFrom(
-                        foregroundColor: Colors.teal.shade600,
-                        side: BorderSide(color: Colors.teal.shade600),
-                        shape: RoundedRectangleBorder(
-                          borderRadius: BorderRadius.circular(12),
-                        ),
-                      ),
-                    ),
-                  ),
-                ),
-                const SizedBox(width: 12),
-                Expanded(
-                  child: SizedBox(
-                    height: 48,
-                    child: ElevatedButton.icon(
-                      onPressed: () {
-                        Navigator.pop(context);
-                        Navigator.push(
-                          context,
-                          MaterialPageRoute(
-                            builder: (_) => const PaymentScreen(),
-                          ),
-                        );
-                      },
-                      icon: const Icon(Icons.receipt_long_rounded, size: 18),
-                      label: const Text(
-                        'Payment',
-                        style: TextStyle(
-                          fontWeight: FontWeight.w600,
-                          fontSize: 13,
-                        ),
-                      ),
-                      style: ElevatedButton.styleFrom(
-                        backgroundColor: Colors.teal.shade600,
-                        foregroundColor: Colors.white,
-                        elevation: 0,
-                        shape: RoundedRectangleBorder(
-                          borderRadius: BorderRadius.circular(12),
-                        ),
-                      ),
-                    ),
-                  ),
-                ),
-              ],
-            ),
-
-            const SizedBox(height: 16),
-            Center(
-              child: Text(
-                'Swipe left to view prescriptions',
-                style: TextStyle(
-                  fontSize: 11,
-                  color: isDark ? Colors.grey.shade600 : Colors.grey.shade400,
-                ),
+          ),
+          const SizedBox(height: 16),
+          Center(
+            child: Text(
+              'Swipe left to view prescriptions',
+              style: TextStyle(
+                fontSize: 11,
+                color: isDark ? Colors.grey.shade600 : Colors.grey.shade400,
               ),
             ),
-          ],
-        ),
+          ),
+        ],
       ),
     );
   }
 
-  // ─────────────────────────────────────────────────────────────────────────
-  // PRESCRIPTION VIEW
-  // ─────────────────────────────────────────────────────────────────────────
   Widget _buildPrescriptionView(bool isDark) {
     final textColor = isDark ? Colors.white : const Color(0xFF1A1A1A);
     final subtextColor = isDark ? Colors.grey.shade400 : Colors.grey.shade500;
@@ -667,7 +600,6 @@ class _OrderTrackingPopupState extends State<OrderTrackingPopup> {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          // ── Top bar ──────────────────────────────────────────────────
           Row(
             children: [
               GestureDetector(
@@ -714,10 +646,7 @@ class _OrderTrackingPopupState extends State<OrderTrackingPopup> {
               ),
             ],
           ),
-
           const SizedBox(height: 20),
-
-          // ── Images ───────────────────────────────────────────────────
           if (_loadingImages)
             const Expanded(child: Center(child: CircularProgressIndicator()))
           else if (_prescriptionImages.isEmpty)
@@ -741,11 +670,9 @@ class _OrderTrackingPopupState extends State<OrderTrackingPopup> {
               ),
             )
           else ...[
-            // Image viewer — expands to fill remaining space
             Expanded(
               child: Stack(
                 children: [
-                  // Image PageView (swipe between multiple images)
                   PageView.builder(
                     controller: _imagePageController,
                     itemCount: _prescriptionImages.length,
@@ -793,8 +720,6 @@ class _OrderTrackingPopupState extends State<OrderTrackingPopup> {
                       );
                     },
                   ),
-
-                  // Image counter badge (top-right)
                   if (_prescriptionImages.length > 1)
                     Positioned(
                       top: 10,
@@ -818,8 +743,6 @@ class _OrderTrackingPopupState extends State<OrderTrackingPopup> {
                         ),
                       ),
                     ),
-
-                  // ── Zoom buttons (bottom-right) ───────────────────────
                   Positioned(
                     bottom: 12,
                     right: 14,
@@ -845,8 +768,6 @@ class _OrderTrackingPopupState extends State<OrderTrackingPopup> {
                 ],
               ),
             ),
-
-            // Page dots
             if (_prescriptionImages.length > 1) ...[
               const SizedBox(height: 12),
               Row(
@@ -869,8 +790,6 @@ class _OrderTrackingPopupState extends State<OrderTrackingPopup> {
               ),
             ],
           ],
-
-          // ── Notes ────────────────────────────────────────────────────
           if (notes.isNotEmpty) ...[
             const SizedBox(height: 16),
             Text(
@@ -897,7 +816,6 @@ class _OrderTrackingPopupState extends State<OrderTrackingPopup> {
               ),
             ),
           ],
-
           const SizedBox(height: 12),
           Center(
             child: Text(
@@ -932,9 +850,6 @@ class _OrderTrackingPopupState extends State<OrderTrackingPopup> {
     );
   }
 
-  // ─────────────────────────────────────────────────────────────────────────
-  // VERIFICATION SECTION
-  // ─────────────────────────────────────────────────────────────────────────
   Widget _buildVerificationSection(
     String? code,
     bool isDark,

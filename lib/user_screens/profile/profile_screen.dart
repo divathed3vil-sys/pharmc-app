@@ -2,10 +2,10 @@ import 'package:flutter/material.dart';
 import '../../constants.dart';
 import '../../services/auth_service.dart';
 import '../../services/preferences_service.dart';
-import '../../screens/role_selection_screen.dart';
 import 'settings_screen.dart';
 import 'edit_profile_screen.dart';
 import '../address/saved_addresses_screen.dart';
+import '../registration/login_screen.dart';
 
 class ProfileScreen extends StatefulWidget {
   const ProfileScreen({super.key});
@@ -41,7 +41,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
     Navigator.pushAndRemoveUntil(
       context,
       PageRouteBuilder(
-        pageBuilder: (_, __, ___) => const RoleSelectionScreen(),
+        pageBuilder: (_, __, ___) => const LoginScreen(),
         transitionDuration: const Duration(milliseconds: 400),
         transitionsBuilder: (_, animation, __, child) =>
             FadeTransition(opacity: animation, child: child),
