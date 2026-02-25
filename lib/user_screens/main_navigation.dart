@@ -1,7 +1,8 @@
 import 'package:flutter/material.dart';
+import '../main.dart';
 import 'home_screen.dart';
 import 'payment_screen.dart';
-import '../main.dart';
+import 'orders_screen.dart';
 
 class MainNavigation extends StatefulWidget {
   const MainNavigation({super.key});
@@ -12,26 +13,26 @@ class MainNavigation extends StatefulWidget {
 
 class _MainNavigationState extends State<MainNavigation>
     with SingleTickerProviderStateMixin {
-  final PageController _pageController = PageController(initialPage: 1);
-  int _currentPage = 1; // 0 = Payment, 1 = Home
+  late PageController _pageController;
+  int _selectedIndex = 1; // Start at Home (center)
 
-  // Pulse animation controller — only runs when payment is needed
+  // Pulse animation for payment hint
   late AnimationController _pulseController;
   late Animation<double> _pulseAnim;
 
-  // Whether the payment screen has orders that need attention
   bool _hasPaymentPending = false;
 
   @override
   void initState() {
     super.initState();
 
+    _pageController = PageController(initialPage: 1);
+
     _pulseController = AnimationController(
       vsync: this,
       duration: const Duration(milliseconds: 1200),
     );
 
-    // Gentle bounce: slides 0 → 10px → 0, loops
     _pulseAnim = Tween<double>(begin: 0, end: 10).animate(
       CurvedAnimation(parent: _pulseController, curve: Curves.easeInOut),
     );
@@ -47,24 +48,25 @@ class _MainNavigationState extends State<MainNavigation>
 
   @override
   void dispose() {
-    _pulseController.dispose();
     _pageController.dispose();
+    _pulseController.dispose();
     super.dispose();
   }
 
-  void _onPageChanged(int page) {
-    setState(() => _currentPage = page);
+  void _onPageChanged(int index) {
+    setState(() {
+      _selectedIndex = index;
+    });
   }
 
-  /// Called every time the orders stream emits. We check if any order is at
-  /// 'price_confirmed' — meaning the admin has set a price and the user needs
-  /// to go to the payment screen to review/confirm it.
   void _updatePaymentState(List<Map<String, dynamic>> orders) {
     final hasPending = orders.any((o) => o['status'] == 'price_confirmed');
 
-    if (hasPending == _hasPaymentPending) return; // nothing changed
+    if (hasPending == _hasPaymentPending) return;
 
-    setState(() => _hasPaymentPending = hasPending);
+    setState(() {
+      _hasPaymentPending = hasPending;
+    });
 
     if (hasPending) {
       _pulseController.forward();
@@ -81,18 +83,19 @@ class _MainNavigationState extends State<MainNavigation>
     return Scaffold(
       body: Stack(
         children: [
-          // ── Page View ──────────────────────────────────────────────────
+          // ───────── PageView (Swipe Navigation) ─────────
           PageView(
             controller: _pageController,
             onPageChanged: _onPageChanged,
             physics: const BouncingScrollPhysics(),
             children: const [
-              PaymentScreen(), // Page 0 — left
-              HomeScreen(), // Page 1 — default / center
+              PaymentScreen(), // 0
+              HomeScreen(), // 1 (default)
+              OrdersScreen(), // 2
             ],
           ),
 
-          // ── Orders stream (invisible — just drives arrow animation) ───
+          // ───────── Invisible Orders Stream ─────────
           if (userId != null)
             StreamBuilder<List<Map<String, dynamic>>>(
               stream: supabase
@@ -101,24 +104,91 @@ class _MainNavigationState extends State<MainNavigation>
                   .eq('user_id', userId),
               builder: (context, snapshot) {
                 if (snapshot.hasData) {
-                  // Schedule after current frame so no setState-during-build
                   WidgetsBinding.instance.addPostFrameCallback((_) {
                     _updatePaymentState(snapshot.data!);
                   });
                 }
-                return const SizedBox.shrink(); // renders nothing
+                return const SizedBox.shrink();
               },
             ),
 
-          // ── Payment hint arrow (only on Home screen) ──────────────────
-          if (_currentPage == 1)
+          // ───────── Payment Hint Arrow (only on Home) ─────────
+          if (_selectedIndex == 1)
             Positioned(
-              // Bottom-left edge — well clear of all home screen content
               bottom: 120,
               left: 0,
               child: _buildPaymentArrow(context),
             ),
         ],
+      ),
+      bottomNavigationBar: _buildBottomNav(),
+    );
+  }
+
+  Widget _buildBottomNav() {
+    return Container(
+      decoration: BoxDecoration(
+        color: Colors.white,
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withOpacity(0.05),
+            blurRadius: 10,
+            offset: const Offset(0, -2),
+          ),
+        ],
+      ),
+      child: SafeArea(
+        child: Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 8),
+          child: Row(
+            mainAxisAlignment: MainAxisAlignment.spaceAround,
+            children: [
+              _buildNavItem(Icons.payment_rounded, 'Payment', 0),
+              _buildNavItem(Icons.home_rounded, 'Home', 1),
+              _buildNavItem(Icons.receipt_long_rounded, 'Orders', 2),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildNavItem(IconData icon, String label, int index) {
+    final isSelected = _selectedIndex == index;
+
+    return GestureDetector(
+      onTap: () {
+        _pageController.animateToPage(
+          index,
+          duration: const Duration(milliseconds: 300),
+          curve: Curves.easeInOut,
+        );
+      },
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+        decoration: BoxDecoration(
+          color: isSelected ? const Color(0xFF6C63FF) : Colors.transparent,
+          borderRadius: BorderRadius.circular(12),
+        ),
+        child: Row(
+          children: [
+            Icon(
+              icon,
+              color: isSelected ? Colors.white : Colors.grey,
+              size: 24,
+            ),
+            if (isSelected) ...[
+              const SizedBox(width: 8),
+              Text(
+                label,
+                style: const TextStyle(
+                  color: Colors.white,
+                  fontWeight: FontWeight.w600,
+                ),
+              ),
+            ],
+          ],
+        ),
       ),
     );
   }
@@ -126,8 +196,6 @@ class _MainNavigationState extends State<MainNavigation>
   Widget _buildPaymentArrow(BuildContext context) {
     final isDark = Theme.of(context).brightness == Brightness.dark;
 
-    // When there's a payment pending: full opacity + bouncing animation.
-    // When idle: barely visible, static — just enough to be discoverable.
     final double opacity = _hasPaymentPending ? 0.85 : 0.15;
 
     return GestureDetector(
@@ -142,14 +210,12 @@ class _MainNavigationState extends State<MainNavigation>
         child: AnimatedBuilder(
           animation: _pulseAnim,
           builder: (context, child) {
-            // Bounce rightward when payment is pending, static otherwise
             final dx = _hasPaymentPending ? _pulseAnim.value : 0.0;
             return Transform.translate(offset: Offset(dx, 0), child: child);
           },
           child: Container(
             padding: const EdgeInsets.fromLTRB(6, 10, 10, 10),
             decoration: BoxDecoration(
-              // Subtle pill tab on the left edge
               color: isDark
                   ? Colors.teal.shade800.withOpacity(0.9)
                   : Colors.teal.shade600,
@@ -171,7 +237,6 @@ class _MainNavigationState extends State<MainNavigation>
               mainAxisSize: MainAxisSize.min,
               children: [
                 Icon(
-                  // Shows a badge-style indicator when payment is pending
                   _hasPaymentPending
                       ? Icons.payments_rounded
                       : Icons.chevron_right_rounded,

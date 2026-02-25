@@ -26,6 +26,7 @@ class AuthService {
         );
       }
 
+      // Cache local UI info
       await _cacheUserLocally(
         name: fullName,
         phone: phone,
@@ -33,10 +34,24 @@ class AuthService {
         role: role,
       );
 
+      // Send OTP email via Edge Function (custom 6-digit OTP)
+      // NOTE: Requires GitHub-deployed edge function: send-email-otp
+      try {
+        await _client.functions.invoke('send-email-otp');
+      } catch (_) {
+        // If email provider not configured yet, signup can still succeed,
+        // but user won't receive OTP. We'll show a clear message.
+        return AuthResult(
+          success: true,
+          needsVerification: true,
+          message: 'Account created, but failed to send OTP email. Try resend.',
+        );
+      }
+
       return AuthResult(
         success: true,
-        message: 'Verification code sent to your email!',
         needsVerification: true,
+        message: 'Verification code sent to your email!',
       );
     } on AuthException catch (e) {
       return AuthResult(success: false, message: _parseAuthError(e.message));
@@ -48,19 +63,17 @@ class AuthService {
     }
   }
 
-  // ============ VERIFY OTP ============
+  // ============ VERIFY OTP (CUSTOM) ============
+  // We do NOT use _client.auth.verifyOTP for this flow.
   static Future<AuthResult> verifyOTP({
-    required String email,
+    required String email, // kept for UI; not required by backend now
     required String otp,
   }) async {
     try {
-      final response = await _client.auth.verifyOTP(
-        email: email,
-        token: otp,
-        type: OtpType.signup,
-      );
+      // verify_email_otp sets profiles.email_verified=true
+      final ok = await _client.rpc('verify_email_otp', params: {'p_code': otp});
 
-      if (response.user == null) {
+      if (ok != true) {
         return AuthResult(
           success: false,
           message: 'Invalid code. Please try again.',
@@ -68,7 +81,6 @@ class AuthService {
       }
 
       await syncProfileToLocal();
-
       return AuthResult(success: true, message: 'Email verified!');
     } on AuthException catch (e) {
       return AuthResult(success: false, message: _parseAuthError(e.message));
@@ -80,15 +92,15 @@ class AuthService {
     }
   }
 
-  // ============ RESEND OTP ============
+  // ============ RESEND OTP (CUSTOM) ============
   static Future<AuthResult> resendOTP(String email) async {
     try {
-      await _client.auth.resend(type: OtpType.signup, email: email);
+      await _client.functions.invoke('send-email-otp');
       return AuthResult(success: true, message: 'New code sent!');
     } catch (e) {
       return AuthResult(
         success: false,
-        message: 'Failed to resend. Please wait a moment.',
+        message: 'Failed to resend. Please try again in a moment.',
       );
     }
   }
@@ -111,7 +123,20 @@ class AuthService {
         );
       }
 
-      if (response.user!.emailConfirmedAt == null) {
+      // Check OUR verification flag (profiles.email_verified)
+      final profile = await _client
+          .from('profiles')
+          .select('email_verified')
+          .eq('id', response.user!.id)
+          .single();
+
+      final verified = profile['email_verified'] == true;
+      if (!verified) {
+        // Optional: auto-send OTP again on login
+        try {
+          await _client.functions.invoke('send-email-otp');
+        } catch (_) {}
+
         return AuthResult(
           success: false,
           message: 'Please verify your email first.',
@@ -120,7 +145,6 @@ class AuthService {
       }
 
       await syncProfileToLocal();
-
       return AuthResult(success: true, message: 'Welcome back!');
     } on AuthException catch (e) {
       return AuthResult(success: false, message: _parseAuthError(e.message));
@@ -139,20 +163,14 @@ class AuthService {
   }
 
   // ============ DELETE ACCOUNT ============
+  // NOTE: Your current DB RLS does not allow deleting profiles directly (and it
+  // won't delete auth.users). We'll implement proper full delete later via RPC/Edge Function.
   static Future<AuthResult> deleteAccount() async {
-    try {
-      final user = _client.auth.currentUser;
-      if (user == null) {
-        return AuthResult(success: false, message: 'No user logged in.');
-      }
-
-      await _client.from('profiles').delete().eq('id', user.id);
-      await signOut();
-
-      return AuthResult(success: true, message: 'Account deleted.');
-    } catch (e) {
-      return AuthResult(success: false, message: 'Failed to delete account.');
-    }
+    return AuthResult(
+      success: false,
+      message:
+          'Account deletion will be implemented with admin-grade wipe soon.',
+    );
   }
 
   // ============ PASSWORD RESET ============
@@ -166,21 +184,25 @@ class AuthService {
   }
 
   // ============ STATE CHECKS ============
-  static bool isLoggedIn() {
-    return _client.auth.currentUser != null;
+  static bool isLoggedIn() => _client.auth.currentUser != null;
+
+  // Old method is not valid anymore because we disabled Supabase email confirmation.
+  // Keep it but return "true" only if session exists; use isEmailVerifiedRemote for real status.
+  static bool isEmailVerified() => _client.auth.currentUser != null;
+
+  static Future<bool> isEmailVerifiedRemote() async {
+    final user = _client.auth.currentUser;
+    if (user == null) return false;
+    final profile = await _client
+        .from('profiles')
+        .select('email_verified')
+        .eq('id', user.id)
+        .single();
+    return profile['email_verified'] == true;
   }
 
-  static bool isEmailVerified() {
-    return _client.auth.currentUser?.emailConfirmedAt != null;
-  }
-
-  static String? getCurrentUserId() {
-    return _client.auth.currentUser?.id;
-  }
-
-  static String? getCurrentEmail() {
-    return _client.auth.currentUser?.email;
-  }
+  static String? getCurrentUserId() => _client.auth.currentUser?.id;
+  static String? getCurrentEmail() => _client.auth.currentUser?.email;
 
   // ============ SYNC PROFILE ============
   static Future<void> syncProfileToLocal() async {
@@ -209,28 +231,23 @@ class AuthService {
     String? phone,
     String? email,
   }) async {
-    try {
-      final user = _client.auth.currentUser;
-      if (user == null) return;
+    final user = _client.auth.currentUser;
+    if (user == null) return;
 
-      final Map<String, dynamic> updates = {
-        'updated_at': DateTime.now().toIso8601String(),
-      };
+    final updates = <String, dynamic>{
+      'updated_at': DateTime.now().toIso8601String(),
+      if (fullName != null) 'full_name': fullName,
+      if (age != null) 'age': age,
+      if (phone != null) 'phone': phone,
+      if (email != null) 'email': email,
+    };
 
-      if (fullName != null) updates['full_name'] = fullName;
-      if (age != null) updates['age'] = age;
-      if (phone != null) updates['phone'] = phone;
-      if (email != null) updates['email'] = email;
+    await _client.from('profiles').update(updates).eq('id', user.id);
 
-      await _client.from('profiles').update(updates).eq('id', user.id);
-
-      if (fullName != null) await PreferencesService.setUserName(fullName);
-      if (age != null) await PreferencesService.setUserAge(age);
-      if (phone != null) await PreferencesService.setUserPhone(phone);
-      if (email != null) await PreferencesService.setUserEmail(email);
-    } catch (e) {
-      rethrow;
-    }
+    if (fullName != null) await PreferencesService.setUserName(fullName);
+    if (age != null) await PreferencesService.setUserAge(age);
+    if (phone != null) await PreferencesService.setUserPhone(phone);
+    if (email != null) await PreferencesService.setUserEmail(email);
   }
 
   // ============ HELPERS ============
@@ -257,14 +274,11 @@ class AuthService {
         msg.contains('invalid email or password')) {
       return 'Incorrect email or password.';
     }
-    if (msg.contains('email not confirmed')) {
-      return 'Please verify your email first.';
-    }
     if (msg.contains('too many requests') || msg.contains('rate limit')) {
       return 'Too many attempts. Please wait a moment.';
     }
     if (msg.contains('weak password') || msg.contains('password')) {
-      return 'Password must be at least 6 characters.';
+      return 'Password is too weak.';
     }
     if (msg.contains('invalid email')) {
       return 'Please enter a valid email address.';
