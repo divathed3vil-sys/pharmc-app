@@ -95,6 +95,17 @@ class PreferencesService {
     return _prefs?.getString('language') ?? 'en';
   }
 
+  // ============ DRAFT PROMPT ============
+  static const String _keyDraftPromptShown = 'draft_prompt_shown';
+
+  static bool getDraftPromptShown() {
+    return _prefs?.getBool(_keyDraftPromptShown) ?? false;
+  }
+
+  static Future<void> setDraftPromptShown(bool value) async {
+    await _prefs?.setBool(_keyDraftPromptShown, value);
+  }
+
   // ============ CLEAR ALL (Logout) ============
   static Future<void> clearAll() async {
     await _prefs?.clear();

@@ -1,9 +1,13 @@
+import 'dart:ui';
 import 'package:flutter/material.dart';
 import '../main.dart';
 import 'order_tracking_popup.dart';
 
+import '../services/draft_order_service.dart';
+import '../services/verification_service.dart';
+
 // ============================================================
-// ORDERS SCREEN — 3-tab: Recent / Active / History
+// ORDERS SCREEN — 4-tab: Recent / Active / History / Drafts
 // Telegram-inspired modern design
 // ============================================================
 class OrdersScreen extends StatefulWidget {
@@ -27,17 +31,45 @@ class _OrdersScreenState extends State<OrdersScreen>
   ];
   final _pastStatuses = ['delivered', 'cancelled'];
 
+  // ── Drafts ──
+  bool _draftsLoading = true;
+  List<DraftOrder> _draftOrders = [];
+  bool _isApproved = false;
+
   @override
   void initState() {
     super.initState();
-    // 3 tabs: Recent, Active, History
-    _tabController = TabController(length: 3, vsync: this);
+    // 4 tabs: Recent, Active, History, Drafts
+    _tabController = TabController(length: 4, vsync: this);
+
+    _loadDrafts();
   }
 
   @override
   void dispose() {
     _tabController.dispose();
     super.dispose();
+  }
+
+  Future<void> _loadDrafts() async {
+    setState(() => _draftsLoading = true);
+    try {
+      final approved = await VerificationService.isApproved();
+      final drafts = await DraftOrderService.getDraftOrders();
+      if (!mounted) return;
+      setState(() {
+        _isApproved = approved;
+        _draftOrders = drafts;
+        _draftsLoading = false;
+      });
+    } catch (_) {
+      if (!mounted) return;
+      setState(() {
+        _isApproved = false;
+        _draftOrders = [];
+        _draftsLoading = false;
+      });
+    }
   }
 
   // ── Status config map ──
@@ -136,21 +168,47 @@ class _OrdersScreenState extends State<OrdersScreen>
             // ════════════════════════════════════════
             Padding(
               padding: const EdgeInsets.fromLTRB(24, 16, 24, 0),
-              child: Text(
-                'My Orders',
-                style: TextStyle(
-                  fontSize: 28,
-                  fontWeight: FontWeight.w800,
-                  color: textColor,
-                  letterSpacing: -0.5,
-                ),
+              child: Row(
+                children: [
+                  Expanded(
+                    child: Text(
+                      'My Orders',
+                      style: TextStyle(
+                        fontSize: 28,
+                        fontWeight: FontWeight.w800,
+                        color: textColor,
+                        letterSpacing: -0.5,
+                      ),
+                    ),
+                  ),
+                  // refresh drafts + status
+                  GestureDetector(
+                    onTap: _loadDrafts,
+                    child: Container(
+                      padding: const EdgeInsets.all(10),
+                      decoration: BoxDecoration(
+                        color: isDark
+                            ? Colors.white.withOpacity(0.06)
+                            : Colors.black.withOpacity(0.04),
+                        borderRadius: BorderRadius.circular(14),
+                      ),
+                      child: Icon(
+                        Icons.refresh_rounded,
+                        size: 20,
+                        color: isDark
+                            ? Colors.grey.shade400
+                            : Colors.grey.shade600,
+                      ),
+                    ),
+                  ),
+                ],
               ),
             ),
 
             const SizedBox(height: 16),
 
             // ════════════════════════════════════════
-            // TAB BAR — 3 tabs
+            // TAB BAR — 4 tabs
             // ════════════════════════════════════════
             Container(
               margin: const EdgeInsets.symmetric(horizontal: 24),
@@ -183,6 +241,7 @@ class _OrdersScreenState extends State<OrdersScreen>
                   Tab(text: 'Recent'),
                   Tab(text: 'Active'),
                   Tab(text: 'History'),
+                  Tab(text: 'Drafts'),
                 ],
               ),
             ),
@@ -233,11 +292,412 @@ class _OrdersScreenState extends State<OrdersScreen>
                     textColor: textColor,
                     cardType: 'compact',
                   ),
+
+                  // ── TAB 4: Drafts (local) ──
+                  _buildDraftsTab(isDark, textColor),
                 ],
               ),
             ),
           ],
         ),
+      ),
+    );
+  }
+
+  // ════════════════════════════════════════
+  // DRAFT TAB (LOCAL)
+  // ════════════════════════════════════════
+  Widget _buildDraftsTab(bool isDark, Color textColor) {
+    final subtextColor = isDark ? Colors.grey.shade500 : Colors.grey.shade500;
+
+    if (_draftsLoading) {
+      return Center(
+        child: CircularProgressIndicator(
+          color: Colors.teal.shade600,
+          strokeWidth: 2.5,
+        ),
+      );
+    }
+
+    if (_draftOrders.isEmpty) {
+      return _buildEmpty(
+        'No drafts',
+        'Draft orders saved before verification appear here',
+        Icons.drafts_outlined,
+        isDark,
+      );
+    }
+
+    return ListView.separated(
+      physics: const BouncingScrollPhysics(),
+      padding: const EdgeInsets.fromLTRB(24, 16, 24, 100),
+      itemCount: _draftOrders.length + 1,
+      separatorBuilder: (_, __) => const SizedBox(height: 14),
+      itemBuilder: (context, index) {
+        // top info banner
+        if (index == 0) {
+          return _buildDraftInfoBanner(isDark, textColor, subtextColor);
+        }
+
+        final d = _draftOrders[index - 1];
+        return _buildDraftCard(d, isDark, textColor, subtextColor);
+      },
+    );
+  }
+
+  Widget _buildDraftInfoBanner(
+    bool isDark,
+    Color textColor,
+    Color subtextColor,
+  ) {
+    final color = _isApproved ? Colors.green : Colors.orange;
+
+    return Container(
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        color: color.withOpacity(isDark ? 0.16 : 0.10),
+        borderRadius: BorderRadius.circular(18),
+        border: Border.all(color: color.withOpacity(0.35)),
+      ),
+      child: Row(
+        children: [
+          Icon(
+            _isApproved ? Icons.verified_rounded : Icons.lock_clock_rounded,
+            color: color,
+          ),
+          const SizedBox(width: 10),
+          Expanded(
+            child: Text(
+              _isApproved
+                  ? 'Your account is verified. Next step: we can upload drafts to the system (sync feature coming next).'
+                  : 'You are not verified yet. Drafts stay on this device until verification.',
+              style: TextStyle(
+                color: textColor,
+                fontSize: 13,
+                height: 1.35,
+                fontWeight: FontWeight.w600,
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildDraftCard(
+    DraftOrder d,
+    bool isDark,
+    Color textColor,
+    Color subtextColor,
+  ) {
+    final cardColor = isDark ? const Color(0xFF1A1A1A) : Colors.white;
+
+    final createdAt = d.createdAt;
+    final months = [
+      'Jan',
+      'Feb',
+      'Mar',
+      'Apr',
+      'May',
+      'Jun',
+      'Jul',
+      'Aug',
+      'Sep',
+      'Oct',
+      'Nov',
+      'Dec',
+    ];
+    final dateStr = '${months[createdAt.month - 1]} ${createdAt.day}';
+
+    return GestureDetector(
+      onTap: () => _showDraftPreview(d, isDark, textColor, subtextColor),
+      child: Container(
+        padding: const EdgeInsets.all(16),
+        decoration: BoxDecoration(
+          color: cardColor,
+          borderRadius: BorderRadius.circular(18),
+          border: Border.all(
+            color: isDark ? Colors.grey.shade800 : Colors.grey.shade200,
+            width: 0.5,
+          ),
+          boxShadow: isDark
+              ? []
+              : [
+                  BoxShadow(
+                    color: Colors.black.withOpacity(0.03),
+                    blurRadius: 10,
+                    offset: const Offset(0, 3),
+                  ),
+                ],
+        ),
+        child: Row(
+          children: [
+            Container(
+              width: 48,
+              height: 48,
+              decoration: BoxDecoration(
+                color: Colors.orange.withOpacity(0.12),
+                borderRadius: BorderRadius.circular(14),
+              ),
+              child: Icon(
+                Icons.drafts_rounded,
+                color: Colors.orange.shade600,
+                size: 22,
+              ),
+            ),
+            const SizedBox(width: 14),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    d.orderName,
+                    style: TextStyle(
+                      fontSize: 15,
+                      fontWeight: FontWeight.w700,
+                      color: textColor,
+                    ),
+                  ),
+                  const SizedBox(height: 3),
+                  Text(
+                    '${d.pharmacyName}  •  $dateStr  •  ${d.images.length} image(s)',
+                    style: TextStyle(fontSize: 12, color: subtextColor),
+                  ),
+                ],
+              ),
+            ),
+            GestureDetector(
+              onTap: () async {
+                await _confirmDeleteDraft(d.id, isDark);
+              },
+              child: Container(
+                width: 38,
+                height: 38,
+                decoration: BoxDecoration(
+                  color: Colors.red.withOpacity(0.10),
+                  borderRadius: BorderRadius.circular(12),
+                ),
+                child: Icon(
+                  Icons.delete_outline_rounded,
+                  color: Colors.red.shade500,
+                  size: 20,
+                ),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Future<void> _confirmDeleteDraft(String id, bool isDark) async {
+    final dialogBg = isDark ? const Color(0xFF1E1E1E) : Colors.white;
+    final dialogText = isDark ? Colors.white : const Color(0xFF1A1A1A);
+
+    final ok = await showDialog<bool>(
+      context: context,
+      builder: (_) => Dialog(
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+        backgroundColor: dialogBg,
+        child: Padding(
+          padding: const EdgeInsets.all(24),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Container(
+                width: 56,
+                height: 56,
+                decoration: BoxDecoration(
+                  color: Colors.red.shade50,
+                  shape: BoxShape.circle,
+                ),
+                child: Icon(
+                  Icons.delete_outline_rounded,
+                  color: Colors.red.shade500,
+                  size: 28,
+                ),
+              ),
+              const SizedBox(height: 16),
+              Text(
+                'Delete Draft?',
+                style: TextStyle(
+                  fontSize: 18,
+                  fontWeight: FontWeight.w800,
+                  color: dialogText,
+                ),
+              ),
+              const SizedBox(height: 8),
+              Text(
+                'This draft will be removed from this device.',
+                textAlign: TextAlign.center,
+                style: TextStyle(fontSize: 13, color: Colors.grey.shade500),
+              ),
+              const SizedBox(height: 18),
+              Row(
+                children: [
+                  Expanded(
+                    child: SizedBox(
+                      height: 46,
+                      child: OutlinedButton(
+                        onPressed: () => Navigator.pop(context, false),
+                        style: OutlinedButton.styleFrom(
+                          shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(12),
+                          ),
+                          side: BorderSide(
+                            color: isDark
+                                ? Colors.grey.shade700
+                                : Colors.grey.shade300,
+                          ),
+                        ),
+                        child: Text(
+                          'Cancel',
+                          style: TextStyle(
+                            color: isDark
+                                ? Colors.grey.shade400
+                                : Colors.grey.shade600,
+                            fontWeight: FontWeight.w700,
+                          ),
+                        ),
+                      ),
+                    ),
+                  ),
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: SizedBox(
+                      height: 46,
+                      child: ElevatedButton(
+                        onPressed: () => Navigator.pop(context, true),
+                        style: ElevatedButton.styleFrom(
+                          backgroundColor: Colors.red.shade500,
+                          foregroundColor: Colors.white,
+                          elevation: 0,
+                          shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(12),
+                          ),
+                        ),
+                        child: const Text(
+                          'Delete',
+                          style: TextStyle(fontWeight: FontWeight.w700),
+                        ),
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+
+    if (ok == true) {
+      await DraftOrderService.deleteDraftOrder(id);
+      await _loadDrafts();
+    }
+  }
+
+  void _showDraftPreview(
+    DraftOrder d,
+    bool isDark,
+    Color textColor,
+    Color subtextColor,
+  ) {
+    showGeneralDialog(
+      context: context,
+      barrierDismissible: true,
+      barrierLabel: 'Close',
+      barrierColor: Colors.black.withOpacity(isDark ? 0.65 : 0.45),
+      transitionDuration: const Duration(milliseconds: 250),
+      pageBuilder: (_, __, ___) => Center(
+        child: Material(
+          color: Colors.transparent,
+          child: Container(
+            width: MediaQuery.of(context).size.width * 0.88,
+            padding: const EdgeInsets.all(18),
+            decoration: BoxDecoration(
+              color: isDark ? const Color(0xFF1A1A1A) : Colors.white,
+              borderRadius: BorderRadius.circular(22),
+              border: Border.all(
+                color: isDark
+                    ? Colors.white.withOpacity(0.06)
+                    : Colors.black.withOpacity(0.06),
+              ),
+            ),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  d.orderName,
+                  style: TextStyle(
+                    color: textColor,
+                    fontWeight: FontWeight.w900,
+                    fontSize: 16,
+                  ),
+                ),
+                const SizedBox(height: 6),
+                Text(
+                  'Pharmacy: ${d.pharmacyName}',
+                  style: TextStyle(color: subtextColor, fontSize: 13),
+                ),
+                const SizedBox(height: 6),
+                Text(
+                  'Notes: ${d.notes.isEmpty ? "-" : d.notes}',
+                  style: TextStyle(color: subtextColor, fontSize: 13),
+                ),
+                const SizedBox(height: 10),
+                Text(
+                  'Images: ${d.images.length}',
+                  style: TextStyle(
+                    color: textColor,
+                    fontWeight: FontWeight.w800,
+                    fontSize: 13,
+                  ),
+                ),
+                const SizedBox(height: 12),
+                Wrap(
+                  spacing: 8,
+                  runSpacing: 8,
+                  children: d.images.take(3).map((img) {
+                    return ClipRRect(
+                      borderRadius: BorderRadius.circular(14),
+                      child: Image.memory(
+                        img.bytes,
+                        width: 80,
+                        height: 80,
+                        fit: BoxFit.cover,
+                      ),
+                    );
+                  }).toList(),
+                ),
+                const SizedBox(height: 16),
+                SizedBox(
+                  width: double.infinity,
+                  height: 46,
+                  child: ElevatedButton(
+                    onPressed: () => Navigator.pop(context),
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: Colors.teal.shade600,
+                      elevation: 0,
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(14),
+                      ),
+                    ),
+                    child: const Text(
+                      'Close',
+                      style: TextStyle(fontWeight: FontWeight.w800),
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ),
+      ),
+      transitionBuilder: (_, anim, __, child) => FadeTransition(
+        opacity: CurvedAnimation(parent: anim, curve: Curves.easeOut),
+        child: child,
       ),
     );
   }
@@ -362,7 +822,6 @@ class _OrdersScreenState extends State<OrdersScreen>
         ),
         child: Row(
           children: [
-            // ── Status icon ──
             Container(
               width: 48,
               height: 48,
@@ -376,10 +835,7 @@ class _OrdersScreenState extends State<OrdersScreen>
                 size: 22,
               ),
             ),
-
             const SizedBox(width: 14),
-
-            // ── Order info ──
             Expanded(
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
@@ -400,8 +856,6 @@ class _OrdersScreenState extends State<OrdersScreen>
                 ],
               ),
             ),
-
-            // ── Price + status ──
             Column(
               crossAxisAlignment: CrossAxisAlignment.end,
               children: [
@@ -485,7 +939,6 @@ class _OrdersScreenState extends State<OrdersScreen>
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            // ── Header row ──
             Row(
               mainAxisAlignment: MainAxisAlignment.spaceBetween,
               children: [
@@ -544,10 +997,7 @@ class _OrdersScreenState extends State<OrdersScreen>
                 ),
               ],
             ),
-
             const SizedBox(height: 14),
-
-            // ── Pharmacy ──
             Container(
               width: double.infinity,
               padding: const EdgeInsets.all(12),
@@ -574,10 +1024,7 @@ class _OrdersScreenState extends State<OrdersScreen>
                 ],
               ),
             ),
-
             const SizedBox(height: 14),
-
-            // ── Tracking steps ──
             ...steps.asMap().entries.map((entry) {
               final step = entry.value;
               final isDone = step['done'] as bool;
@@ -647,10 +1094,7 @@ class _OrdersScreenState extends State<OrdersScreen>
                 ],
               );
             }),
-
             const SizedBox(height: 14),
-
-            // ── Price ──
             Row(
               mainAxisAlignment: MainAxisAlignment.spaceBetween,
               children: [
@@ -670,7 +1114,6 @@ class _OrdersScreenState extends State<OrdersScreen>
                 ),
               ],
             ),
-
             const SizedBox(height: 10),
             Center(
               child: Text(
@@ -728,6 +1171,7 @@ class _OrdersScreenState extends State<OrdersScreen>
           const SizedBox(height: 4),
           Text(
             subtitle,
+            textAlign: TextAlign.center,
             style: TextStyle(
               fontSize: 13,
               color: isDark ? Colors.grey.shade600 : Colors.grey.shade400,

@@ -3,6 +3,7 @@ import 'package:supabase_flutter/supabase_flutter.dart';
 import 'screens/splash_screen.dart';
 import 'services/preferences_service.dart';
 import 'services/theme_service.dart';
+import 'package:hive_flutter/hive_flutter.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -16,6 +17,8 @@ void main() async {
 
   // Initialize SharedPreferences
   await PreferencesService.init();
+
+  await Hive.initFlutter();
 
   runApp(const MyApp());
 }

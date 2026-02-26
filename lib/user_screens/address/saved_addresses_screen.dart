@@ -1,9 +1,11 @@
 import 'package:flutter/material.dart';
 import '../../services/address_service.dart';
 import 'add_address_screen.dart';
+import '../../services/verification_service.dart';
+import 'local_saved_address_screen.dart';
 
 class SavedAddressesScreen extends StatefulWidget {
-  final bool selectMode; // true = picking address for order
+  final bool selectMode;
 
   const SavedAddressesScreen({super.key, this.selectMode = false});
 
@@ -23,6 +25,18 @@ class _SavedAddressesScreenState extends State<SavedAddressesScreen> {
 
   Future<void> _loadAddresses() async {
     setState(() => _isLoading = true);
+
+    final isApproved = await VerificationService.isApproved();
+
+    if (!isApproved) {
+      if (!mounted) return;
+      setState(() {
+        _addresses = [];
+        _isLoading = false;
+      });
+      return;
+    }
+
     final data = await AddressService.getAddresses();
     if (mounted) {
       setState(() {
@@ -174,85 +188,138 @@ class _SavedAddressesScreenState extends State<SavedAddressesScreen> {
     final backBg = isDark ? const Color(0xFF2A2A2A) : const Color(0xFFF5F5F5);
     final cardBg = isDark ? const Color(0xFF1E1E1E) : const Color(0xFFF8F9FA);
 
-    return Scaffold(
-      backgroundColor: Theme.of(context).scaffoldBackgroundColor,
-      appBar: AppBar(
-        leading: GestureDetector(
-          onTap: () => Navigator.pop(context),
-          child: Container(
-            margin: const EdgeInsets.all(8),
-            decoration: BoxDecoration(
-              color: backBg,
-              borderRadius: BorderRadius.circular(12),
-            ),
-            child: Icon(Icons.arrow_back_rounded, color: textColor, size: 20),
-          ),
-        ),
-        title: Text(
-          widget.selectMode ? 'Select Address' : 'Saved Addresses',
-          style: TextStyle(
-            fontSize: 18,
-            fontWeight: FontWeight.w600,
-            color: textColor,
-          ),
-        ),
-        centerTitle: true,
-        actions: [
-          GestureDetector(
-            onTap: _addNew,
-            child: Container(
-              margin: const EdgeInsets.all(8),
-              padding: const EdgeInsets.symmetric(horizontal: 14),
-              decoration: BoxDecoration(
-                color: isDark
-                    ? Colors.teal.shade900.withOpacity(0.4)
-                    : Colors.teal.shade50,
-                borderRadius: BorderRadius.circular(12),
-              ),
-              child: Row(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  Icon(
-                    Icons.add_rounded,
-                    color: Colors.teal.shade600,
+    return FutureBuilder<bool>(
+      future: VerificationService.isApproved(),
+      builder: (context, snap) {
+        final approved = snap.data == true;
+
+        // While checking, show a clean loader
+        if (!snap.hasData) {
+          return Scaffold(
+            backgroundColor: Theme.of(context).scaffoldBackgroundColor,
+            appBar: AppBar(
+              leading: GestureDetector(
+                onTap: () => Navigator.pop(context),
+                child: Container(
+                  margin: const EdgeInsets.all(8),
+                  decoration: BoxDecoration(
+                    color: backBg,
+                    borderRadius: BorderRadius.circular(12),
+                  ),
+                  child: Icon(
+                    Icons.arrow_back_rounded,
+                    color: textColor,
                     size: 20,
                   ),
-                  const SizedBox(width: 4),
-                  Text(
-                    'Add',
-                    style: TextStyle(
-                      fontSize: 14,
-                      fontWeight: FontWeight.w600,
-                      color: Colors.teal.shade600,
-                    ),
-                  ),
-                ],
+                ),
+              ),
+              title: Text(
+                widget.selectMode ? 'Select Address' : 'Saved Addresses',
+                style: TextStyle(
+                  fontSize: 18,
+                  fontWeight: FontWeight.w600,
+                  color: textColor,
+                ),
+              ),
+              centerTitle: true,
+            ),
+            body: Center(
+              child: CircularProgressIndicator(color: Colors.teal.shade600),
+            ),
+          );
+        }
+
+        // If not approved: use local address UI
+        if (!approved) {
+          return LocalSavedAddressScreen(selectMode: widget.selectMode);
+        }
+
+        // If approved: show DB-based address UI
+        return Scaffold(
+          backgroundColor: Theme.of(context).scaffoldBackgroundColor,
+          appBar: AppBar(
+            leading: GestureDetector(
+              onTap: () => Navigator.pop(context),
+              child: Container(
+                margin: const EdgeInsets.all(8),
+                decoration: BoxDecoration(
+                  color: backBg,
+                  borderRadius: BorderRadius.circular(12),
+                ),
+                child: Icon(
+                  Icons.arrow_back_rounded,
+                  color: textColor,
+                  size: 20,
+                ),
               ),
             ),
-          ),
-        ],
-      ),
-      body: _isLoading
-          ? Center(
-              child: CircularProgressIndicator(color: Colors.teal.shade600),
-            )
-          : _addresses.isEmpty
-          ? _buildEmptyState(isDark, subtextColor)
-          : ListView.separated(
-              physics: const BouncingScrollPhysics(),
-              padding: const EdgeInsets.all(24),
-              itemCount: _addresses.length,
-              separatorBuilder: (_, __) => const SizedBox(height: 12),
-              itemBuilder: (context, index) {
-                return _buildAddressCard(
-                  _addresses[index],
-                  isDark,
-                  textColor,
-                  subtextColor,
-                  cardBg,
-                );
-              },
+            title: Text(
+              widget.selectMode ? 'Select Address' : 'Saved Addresses',
+              style: TextStyle(
+                fontSize: 18,
+                fontWeight: FontWeight.w600,
+                color: textColor,
+              ),
             ),
+            centerTitle: true,
+            actions: [
+              GestureDetector(
+                onTap: _addNew,
+                child: Container(
+                  margin: const EdgeInsets.all(8),
+                  padding: const EdgeInsets.symmetric(horizontal: 14),
+                  decoration: BoxDecoration(
+                    color: isDark
+                        ? Colors.teal.shade900.withOpacity(0.4)
+                        : Colors.teal.shade50,
+                    borderRadius: BorderRadius.circular(12),
+                  ),
+                  child: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Icon(
+                        Icons.add_rounded,
+                        color: Colors.teal.shade600,
+                        size: 20,
+                      ),
+                      const SizedBox(width: 4),
+                      Text(
+                        'Add',
+                        style: TextStyle(
+                          fontSize: 14,
+                          fontWeight: FontWeight.w600,
+                          color: Colors.teal.shade600,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+            ],
+          ),
+          body: _isLoading
+              ? Center(
+                  child: CircularProgressIndicator(color: Colors.teal.shade600),
+                )
+              : _addresses.isEmpty
+              ? _buildEmptyState(isDark, subtextColor)
+              : ListView.separated(
+                  physics: const BouncingScrollPhysics(),
+                  padding: const EdgeInsets.all(24),
+                  itemCount: _addresses.length,
+                  separatorBuilder: (_, __) => const SizedBox(height: 12),
+                  itemBuilder: (context, index) {
+                    return _buildAddressCard(
+                      _addresses[index],
+                      isDark,
+                      textColor,
+                      subtextColor,
+                      cardBg,
+                    );
+                  },
+                ),
+        );
+      },
     );
   }
 
@@ -301,7 +368,6 @@ class _SavedAddressesScreenState extends State<SavedAddressesScreen> {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            // Top row: label + badges
             Row(
               children: [
                 Container(
@@ -388,8 +454,6 @@ class _SavedAddressesScreenState extends State<SavedAddressesScreen> {
               ],
             ),
             const SizedBox(height: 10),
-
-            // Address text
             Padding(
               padding: const EdgeInsets.only(left: 52),
               child: Text(
@@ -407,8 +471,6 @@ class _SavedAddressesScreenState extends State<SavedAddressesScreen> {
                 ),
               ),
             ],
-
-            // Action buttons (only in manage mode)
             if (!widget.selectMode) ...[
               const SizedBox(height: 14),
               Padding(
