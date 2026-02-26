@@ -106,6 +106,27 @@ class PreferencesService {
     await _prefs?.setBool(_keyDraftPromptShown, value);
   }
 
+  // ============ VERIFY POPUP SNOOZE (24h) ============
+  static const String _keyVerifyPopupSnoozeUntil = 'verify_popup_snooze_until';
+
+  static DateTime? getVerifyPopupSnoozeUntil() {
+    final iso = _prefs?.getString(_keyVerifyPopupSnoozeUntil);
+    if (iso == null) return null;
+    return DateTime.tryParse(iso);
+  }
+
+  static Future<void> snoozeVerifyPopupFor24h() async {
+    final until = DateTime.now().add(const Duration(hours: 24));
+    await _prefs?.setString(
+      _keyVerifyPopupSnoozeUntil,
+      until.toIso8601String(),
+    );
+  }
+
+  static Future<void> clearVerifyPopupSnooze() async {
+    await _prefs?.remove(_keyVerifyPopupSnoozeUntil);
+  }
+
   // ============ CLEAR ALL (Logout) ============
   static Future<void> clearAll() async {
     await _prefs?.clear();

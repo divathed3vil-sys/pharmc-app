@@ -10,10 +10,12 @@ import '../services/verification_service.dart';
 import 'upload_prescription_screen.dart';
 import 'profile/profile_screen.dart';
 import 'explore_products_screen.dart';
+import 'verification/verify_account_screen.dart';
 
 // ============================================================
 // HOME SCREEN — Telegram-inspired modern pharmacy UI
 // + Draft sync prompt after verification (background upload)
+// + "Not verified" popup with 24h snooze
 // ============================================================
 class HomeScreen extends StatefulWidget {
   const HomeScreen({super.key});
@@ -135,8 +137,9 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
       if (mounted) _exploreGlowController.repeat(reverse: true);
     });
 
-    // ── Check for verification + drafts and prompt once ──
+    // ── Post-frame checks: verification popup + draft sync prompt ──
     WidgetsBinding.instance.addPostFrameCallback((_) {
+      _maybeShowNotVerifiedPopup();
       _checkDraftSyncPrompt();
     });
   }
@@ -151,10 +154,244 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
   }
 
   // ============================================================
-  // Draft prompt logic (runs in background)
+  // "Not Verified" popup logic (24h snooze)
+  // ============================================================
+  Future<void> _maybeShowNotVerifiedPopup() async {
+    // If snoozed and snooze is still active, skip
+    final snoozeUntil = PreferencesService.getVerifyPopupSnoozeUntil();
+    if (snoozeUntil != null && snoozeUntil.isAfter(DateTime.now())) {
+      return;
+    }
+
+    final status = await VerificationService.getMyVerificationStatus();
+    if (!mounted) return;
+
+    // Only show if NOT approved
+    if (status == 'approved') return;
+
+    _showNotVerifiedPopup(status);
+  }
+
+  void _showNotVerifiedPopup(String status) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    final textColor = isDark ? Colors.white : const Color(0xFF1A1A1A);
+
+    String title;
+    String subtitle;
+
+    if (status == 'pending') {
+      title = 'Verification pending';
+      subtitle =
+          "We're reviewing your account. Meanwhile you can create demo orders.";
+    } else {
+      title = 'Verify to place orders';
+      subtitle =
+          'Your demo orders are saved on this device. Verify to place them for real.';
+    }
+
+    showGeneralDialog(
+      context: context,
+      barrierDismissible: true,
+      barrierLabel: 'Not verified',
+      barrierColor: Colors.black.withOpacity(isDark ? 0.60 : 0.40),
+      transitionDuration: const Duration(milliseconds: 250),
+      pageBuilder: (_, __, ___) => Center(
+        child: Material(
+          color: Colors.transparent,
+          child: ClipRRect(
+            borderRadius: BorderRadius.circular(24),
+            child: BackdropFilter(
+              filter: ImageFilter.blur(sigmaX: 18, sigmaY: 18),
+              child: Container(
+                width: MediaQuery.of(context).size.width * 0.88,
+                padding: const EdgeInsets.all(18),
+                decoration: BoxDecoration(
+                  color: isDark
+                      ? Colors.white.withOpacity(0.06)
+                      : Colors.white.withOpacity(0.92),
+                  borderRadius: BorderRadius.circular(24),
+                  border: Border.all(
+                    color: isDark
+                        ? Colors.white.withOpacity(0.08)
+                        : Colors.black.withOpacity(0.06),
+                  ),
+                ),
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    // ── Playful "reward" icon ──
+                    Container(
+                      width: 62,
+                      height: 62,
+                      decoration: BoxDecoration(
+                        color: Colors.teal.withOpacity(0.12),
+                        shape: BoxShape.circle,
+                      ),
+                      child: Icon(
+                        Icons.lock_open_rounded,
+                        size: 32,
+                        color: Colors.teal.shade500,
+                      ),
+                    ),
+                    const SizedBox(height: 12),
+                    Text(
+                      title,
+                      style: TextStyle(
+                        color: textColor,
+                        fontWeight: FontWeight.w900,
+                        fontSize: 18,
+                      ),
+                    ),
+                    const SizedBox(height: 8),
+                    Text(
+                      subtitle,
+                      textAlign: TextAlign.center,
+                      style: TextStyle(
+                        color: Colors.grey.shade500,
+                        fontSize: 13,
+                        height: 1.4,
+                      ),
+                    ),
+                    const SizedBox(height: 14),
+
+                    // ── Psychological perk bullets ──
+                    _perkRow(
+                      'Unlock real orders',
+                      Icons.receipt_long_rounded,
+                      isDark,
+                    ),
+                    const SizedBox(height: 8),
+                    _perkRow(
+                      'Faster processing',
+                      Icons.flash_on_rounded,
+                      isDark,
+                    ),
+                    const SizedBox(height: 8),
+                    _perkRow(
+                      'Trusted pharmacies',
+                      Icons.verified_rounded,
+                      isDark,
+                    ),
+
+                    const SizedBox(height: 16),
+
+                    // ── Verify now button ──
+                    SizedBox(
+                      width: double.infinity,
+                      height: 48,
+                      child: ElevatedButton(
+                        onPressed: () async {
+                          Navigator.pop(context);
+                          await PreferencesService.clearVerifyPopupSnooze();
+                          if (!context.mounted) return;
+                          Navigator.push(
+                            context,
+                            _smoothRoute(const VerifyAccountScreen()),
+                          );
+                        },
+                        style: ElevatedButton.styleFrom(
+                          backgroundColor: Colors.teal.shade600,
+                          foregroundColor: Colors.white,
+                          elevation: 0,
+                          shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(16),
+                          ),
+                        ),
+                        child: const Text(
+                          'Verify now',
+                          style: TextStyle(fontWeight: FontWeight.w900),
+                        ),
+                      ),
+                    ),
+                    const SizedBox(height: 10),
+
+                    // ── Not now (snooze 24h) button ──
+                    SizedBox(
+                      width: double.infinity,
+                      height: 48,
+                      child: OutlinedButton(
+                        onPressed: () async {
+                          await PreferencesService.snoozeVerifyPopupFor24h();
+                          if (!context.mounted) return;
+                          Navigator.pop(context);
+                        },
+                        style: OutlinedButton.styleFrom(
+                          shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(16),
+                          ),
+                          side: BorderSide(
+                            color: isDark
+                                ? Colors.grey.shade700
+                                : Colors.grey.shade300,
+                          ),
+                        ),
+                        child: Text(
+                          'Not now',
+                          style: TextStyle(
+                            fontWeight: FontWeight.w900,
+                            color: isDark
+                                ? Colors.grey.shade400
+                                : Colors.grey.shade600,
+                          ),
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+          ),
+        ),
+      ),
+      transitionBuilder: (_, anim, __, child) => FadeTransition(
+        opacity: CurvedAnimation(parent: anim, curve: Curves.easeOut),
+        child: child,
+      ),
+    );
+  }
+
+  Widget _perkRow(String text, IconData icon, bool isDark) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+      decoration: BoxDecoration(
+        color: isDark
+            ? Colors.white.withOpacity(0.05)
+            : Colors.black.withOpacity(0.03),
+        borderRadius: BorderRadius.circular(14),
+        border: Border.all(
+          color: isDark
+              ? Colors.white.withOpacity(0.08)
+              : Colors.black.withOpacity(0.05),
+        ),
+      ),
+      child: Row(
+        children: [
+          Icon(icon, size: 18, color: Colors.teal.shade400),
+          const SizedBox(width: 10),
+          Expanded(
+            child: Text(
+              text,
+              style: TextStyle(
+                fontWeight: FontWeight.w800,
+                fontSize: 13,
+                color: isDark ? Colors.white : const Color(0xFF1A1A1A),
+              ),
+            ),
+          ),
+          Icon(
+            Icons.arrow_forward_rounded,
+            size: 16,
+            color: Colors.grey.shade500,
+          ),
+        ],
+      ),
+    );
+  }
+
+  // ============================================================
+  // Draft sync prompt logic (runs once after verification)
   // ============================================================
   Future<void> _checkDraftSyncPrompt() async {
-    // show only once (until app reinstall or you reset flag)
     if (PreferencesService.getDraftPromptShown()) return;
 
     final approved = await VerificationService.isApproved();
@@ -165,7 +402,6 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
 
     if (!mounted) return;
 
-    // mark as shown immediately (avoid multiple dialogs)
     await PreferencesService.setDraftPromptShown(true);
 
     _showDraftDecisionPopup(drafts.length);
@@ -173,7 +409,7 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
 
   void _showDraftDecisionPopup(int count) {
     final isDark = Theme.of(context).brightness == Brightness.dark;
-    final text = isDark ? Colors.white : const Color(0xFF1A1A1A);
+    final textColor = isDark ? Colors.white : const Color(0xFF1A1A1A);
 
     showGeneralDialog(
       context: context,
@@ -213,9 +449,9 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
                       ),
                       const SizedBox(height: 10),
                       Text(
-                        'You’re verified!',
+                        "You're verified!",
                         style: TextStyle(
-                          color: text,
+                          color: textColor,
                           fontWeight: FontWeight.w900,
                           fontSize: 18,
                         ),
@@ -231,6 +467,8 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
                         ),
                       ),
                       const SizedBox(height: 16),
+
+                      // ── Place all drafts ──
                       SizedBox(
                         width: double.infinity,
                         height: 48,
@@ -241,6 +479,7 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
                           },
                           style: ElevatedButton.styleFrom(
                             backgroundColor: Colors.teal.shade600,
+                            foregroundColor: Colors.white,
                             elevation: 0,
                             shape: RoundedRectangleBorder(
                               borderRadius: BorderRadius.circular(16),
@@ -253,6 +492,8 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
                         ),
                       ),
                       const SizedBox(height: 10),
+
+                      // ── Delete all drafts ──
                       SizedBox(
                         width: double.infinity,
                         height: 48,
@@ -272,10 +513,20 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
                             shape: RoundedRectangleBorder(
                               borderRadius: BorderRadius.circular(16),
                             ),
+                            side: BorderSide(
+                              color: isDark
+                                  ? Colors.grey.shade700
+                                  : Colors.grey.shade300,
+                            ),
                           ),
-                          child: const Text(
+                          child: Text(
                             'Delete all demo orders',
-                            style: TextStyle(fontWeight: FontWeight.w900),
+                            style: TextStyle(
+                              fontWeight: FontWeight.w900,
+                              color: isDark
+                                  ? Colors.grey.shade400
+                                  : Colors.grey.shade600,
+                            ),
                           ),
                         ),
                       ),
@@ -294,6 +545,9 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
     );
   }
 
+  // ============================================================
+  // Background draft upload
+  // ============================================================
   Future<void> _startBackgroundDraftUpload() async {
     if (_syncInProgress) return;
 
@@ -354,7 +608,7 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
         child: SafeArea(
           child: Stack(
             children: [
-              // Main scroll content
+              // ── Main scroll content ──
               CustomScrollView(
                 physics: const BouncingScrollPhysics(
                   parent: AlwaysScrollableScrollPhysics(),
@@ -558,13 +812,15 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
                 ],
               ),
 
-              // Non-blocking progress overlay
+              // ════════════════════════════════════════
+              // SYNC PROGRESS — Tiny top pill overlay
+              // ════════════════════════════════════════
               if (_syncInProgress && _syncProgress != null)
                 Positioned(
                   left: 16,
                   right: 16,
-                  bottom: 12,
-                  child: _buildSyncOverlay(isDark),
+                  top: 10,
+                  child: SafeArea(child: _buildSyncOverlayTiny(isDark)),
                 ),
             ],
           ),
@@ -573,23 +829,27 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
     );
   }
 
-  Widget _buildSyncOverlay(bool isDark) {
+  // ════════════════════════════════════════
+  // SYNC OVERLAY — Tiny rounded pill at top
+  // ════════════════════════════════════════
+  Widget _buildSyncOverlayTiny(bool isDark) {
     final p = _syncProgress!;
     final progressValue = (p.total > 0)
         ? (p.done / p.total).clamp(0.0, 1.0)
         : null;
 
     return ClipRRect(
-      borderRadius: BorderRadius.circular(18),
+      borderRadius: BorderRadius.circular(999),
       child: BackdropFilter(
-        filter: ImageFilter.blur(sigmaX: 16, sigmaY: 16),
+        filter: ImageFilter.blur(sigmaX: 14, sigmaY: 14),
         child: Container(
-          padding: const EdgeInsets.all(14),
+          height: 34,
+          padding: const EdgeInsets.symmetric(horizontal: 12),
           decoration: BoxDecoration(
             color: isDark
                 ? Colors.white.withOpacity(0.08)
-                : Colors.black.withOpacity(0.08),
-            borderRadius: BorderRadius.circular(18),
+                : Colors.black.withOpacity(0.06),
+            borderRadius: BorderRadius.circular(999),
             border: Border.all(
               color: isDark
                   ? Colors.white.withOpacity(0.10)
@@ -599,25 +859,28 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
           child: Row(
             children: [
               SizedBox(
-                width: 34,
-                height: 34,
+                width: 18,
+                height: 18,
                 child: CircularProgressIndicator(
-                  strokeWidth: 2.6,
+                  strokeWidth: 2.2,
                   value: progressValue,
                   color: Colors.teal.shade400,
                 ),
               ),
-              const SizedBox(width: 12),
+              const SizedBox(width: 10),
               Expanded(
                 child: Text(
                   p.message,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
                   style: TextStyle(
                     color: isDark ? Colors.white : const Color(0xFF1A1A1A),
                     fontWeight: FontWeight.w800,
-                    fontSize: 13,
+                    fontSize: 12,
                   ),
                 ),
               ),
+              const SizedBox(width: 8),
               Text(
                 '${p.done}/${p.total}',
                 style: TextStyle(
@@ -625,7 +888,7 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
                     0.55,
                   ),
                   fontWeight: FontWeight.w800,
-                  fontSize: 12,
+                  fontSize: 11,
                 ),
               ),
             ],
