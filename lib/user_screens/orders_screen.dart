@@ -1,4 +1,3 @@
-import 'dart:ui';
 import 'package:flutter/material.dart';
 import '../main.dart';
 import 'order_tracking_popup.dart';
@@ -6,10 +5,6 @@ import 'order_tracking_popup.dart';
 import '../services/draft_order_service.dart';
 import '../services/verification_service.dart';
 
-// ============================================================
-// ORDERS SCREEN — 4-tab: Recent / Active / History / Drafts
-// Telegram-inspired modern design
-// ============================================================
 class OrdersScreen extends StatefulWidget {
   const OrdersScreen({super.key});
 
@@ -19,9 +14,16 @@ class OrdersScreen extends StatefulWidget {
 
 class _OrdersScreenState extends State<OrdersScreen>
     with SingleTickerProviderStateMixin {
-  late TabController _tabController;
+  TabController? _tabController;
 
-  // ── Status groupings ──
+  bool _isApproved = false;
+  bool _statusLoading = true;
+
+  // Drafts
+  bool _draftsLoading = true;
+  List<DraftOrder> _draftOrders = [];
+  bool _showDraftsTab = false;
+
   final _activeStatuses = [
     'order_placed',
     'pharmacist_verified',
@@ -31,48 +33,42 @@ class _OrdersScreenState extends State<OrdersScreen>
   ];
   final _pastStatuses = ['delivered', 'cancelled'];
 
-  // ── Drafts ──
-  bool _draftsLoading = true;
-  List<DraftOrder> _draftOrders = [];
-  bool _isApproved = false;
-
   @override
   void initState() {
     super.initState();
-    // 4 tabs: Recent, Active, History, Drafts
-    _tabController = TabController(length: 4, vsync: this);
-
-    _loadDrafts();
+    _initTabs();
   }
 
   @override
   void dispose() {
-    _tabController.dispose();
+    _tabController?.dispose();
     super.dispose();
   }
 
-  Future<void> _loadDrafts() async {
-    setState(() => _draftsLoading = true);
-    try {
-      final approved = await VerificationService.isApproved();
-      final drafts = await DraftOrderService.getDraftOrders();
-      if (!mounted) return;
-      setState(() {
-        _isApproved = approved;
-        _draftOrders = drafts;
-        _draftsLoading = false;
-      });
-    } catch (_) {
-      if (!mounted) return;
-      setState(() {
-        _isApproved = false;
-        _draftOrders = [];
-        _draftsLoading = false;
-      });
-    }
+  Future<void> _initTabs() async {
+    setState(() => _statusLoading = true);
+
+    final approved = await VerificationService.isApproved();
+    final drafts = await DraftOrderService.getDraftOrders();
+
+    if (!mounted) return;
+
+    _isApproved = approved;
+    _draftOrders = drafts;
+    _draftsLoading = false;
+
+    // Behavior B:
+    // Drafts tab exists only if drafts exist (even if verified)
+    _showDraftsTab = _draftOrders.isNotEmpty;
+
+    _statusLoading = false;
+
+    _tabController?.dispose();
+    _tabController = TabController(length: _showDraftsTab ? 4 : 3, vsync: this);
+
+    setState(() {});
   }
 
-  // ── Status config map ──
   Map<String, dynamic> _getStatusConfig(String status) {
     switch (status) {
       case 'order_placed':
@@ -126,7 +122,6 @@ class _OrdersScreenState extends State<OrdersScreen>
     }
   }
 
-  // ── Tracking steps for active orders ──
   List<Map<String, dynamic>> _getTrackingSteps(String status) {
     final allSteps = [
       {'label': 'Order Placed', 'key': 'order_placed'},
@@ -157,15 +152,76 @@ class _OrdersScreenState extends State<OrdersScreen>
     final tabBg = isDark ? const Color(0xFF1A1A1A) : const Color(0xFFF0F0F0);
     final userId = supabase.auth.currentUser?.id;
 
+    if (_tabController == null || _statusLoading) {
+      return Scaffold(
+        backgroundColor: bgColor,
+        body: Center(
+          child: CircularProgressIndicator(
+            color: Colors.teal.shade600,
+            strokeWidth: 2.5,
+          ),
+        ),
+      );
+    }
+
+    final tabs = _showDraftsTab
+        ? const [
+            Tab(text: 'Recent'),
+            Tab(text: 'Active'),
+            Tab(text: 'History'),
+            Tab(text: 'Drafts'),
+          ]
+        : const [
+            Tab(text: 'Recent'),
+            Tab(text: 'Active'),
+            Tab(text: 'History'),
+          ];
+
+    final views = <Widget>[
+      _buildOrderStream(
+        userId: userId,
+        filterFn: (_) => true,
+        limit: 5,
+        emptyTitle: 'No recent orders',
+        emptySubtitle: 'Your latest orders will appear here',
+        emptyIcon: Icons.receipt_long_outlined,
+        isDark: isDark,
+        textColor: textColor,
+        cardType: 'compact',
+      ),
+      _buildOrderStream(
+        userId: userId,
+        filterFn: (status) => _activeStatuses.contains(status),
+        emptyTitle: 'No active orders',
+        emptySubtitle: 'Current orders will appear here',
+        emptyIcon: Icons.local_shipping_outlined,
+        isDark: isDark,
+        textColor: textColor,
+        cardType: 'detailed',
+      ),
+      _buildOrderStream(
+        userId: userId,
+        filterFn: (status) => _pastStatuses.contains(status),
+        emptyTitle: 'No order history',
+        emptySubtitle: 'Completed orders will appear here',
+        emptyIcon: Icons.history_rounded,
+        isDark: isDark,
+        textColor: textColor,
+        cardType: 'compact',
+      ),
+    ];
+
+    if (_showDraftsTab) {
+      views.add(_buildDraftsTab(isDark, textColor));
+    }
+
     return Scaffold(
       backgroundColor: bgColor,
       body: SafeArea(
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            // ════════════════════════════════════════
-            // HEADER
-            // ════════════════════════════════════════
+            // Header + refresh
             Padding(
               padding: const EdgeInsets.fromLTRB(24, 16, 24, 0),
               child: Row(
@@ -181,9 +237,8 @@ class _OrdersScreenState extends State<OrdersScreen>
                       ),
                     ),
                   ),
-                  // refresh drafts + status
                   GestureDetector(
-                    onTap: _loadDrafts,
+                    onTap: _initTabs,
                     child: Container(
                       padding: const EdgeInsets.all(10),
                       decoration: BoxDecoration(
@@ -207,9 +262,7 @@ class _OrdersScreenState extends State<OrdersScreen>
 
             const SizedBox(height: 16),
 
-            // ════════════════════════════════════════
-            // TAB BAR — 4 tabs
-            // ════════════════════════════════════════
+            // Tabs
             Container(
               margin: const EdgeInsets.symmetric(horizontal: 24),
               decoration: BoxDecoration(
@@ -237,65 +290,17 @@ class _OrdersScreenState extends State<OrdersScreen>
                 ),
                 dividerColor: Colors.transparent,
                 padding: const EdgeInsets.all(4),
-                tabs: const [
-                  Tab(text: 'Recent'),
-                  Tab(text: 'Active'),
-                  Tab(text: 'History'),
-                  Tab(text: 'Drafts'),
-                ],
+                tabs: tabs,
               ),
             ),
 
             const SizedBox(height: 8),
 
-            // ════════════════════════════════════════
-            // TAB VIEWS
-            // ════════════════════════════════════════
             Expanded(
               child: TabBarView(
                 controller: _tabController,
                 physics: const BouncingScrollPhysics(),
-                children: [
-                  // ── TAB 1: Recent (last 5 orders, any status) ──
-                  _buildOrderStream(
-                    userId: userId,
-                    filterFn: (_) => true,
-                    limit: 5,
-                    emptyTitle: 'No recent orders',
-                    emptySubtitle: 'Your latest orders will appear here',
-                    emptyIcon: Icons.receipt_long_outlined,
-                    isDark: isDark,
-                    textColor: textColor,
-                    cardType: 'compact',
-                  ),
-
-                  // ── TAB 2: Active ──
-                  _buildOrderStream(
-                    userId: userId,
-                    filterFn: (status) => _activeStatuses.contains(status),
-                    emptyTitle: 'No active orders',
-                    emptySubtitle: 'Current orders will appear here',
-                    emptyIcon: Icons.local_shipping_outlined,
-                    isDark: isDark,
-                    textColor: textColor,
-                    cardType: 'detailed',
-                  ),
-
-                  // ── TAB 3: History ──
-                  _buildOrderStream(
-                    userId: userId,
-                    filterFn: (status) => _pastStatuses.contains(status),
-                    emptyTitle: 'No order history',
-                    emptySubtitle: 'Completed orders will appear here',
-                    emptyIcon: Icons.history_rounded,
-                    isDark: isDark,
-                    textColor: textColor,
-                    cardType: 'compact',
-                  ),
-
-                  // ── TAB 4: Drafts (local) ──
-                  _buildDraftsTab(isDark, textColor),
-                ],
+                children: views,
               ),
             ),
           ],
@@ -304,9 +309,9 @@ class _OrdersScreenState extends State<OrdersScreen>
     );
   }
 
-  // ════════════════════════════════════════
-  // DRAFT TAB (LOCAL)
-  // ════════════════════════════════════════
+  // ------------------------------
+  // Drafts tab
+  // ------------------------------
   Widget _buildDraftsTab(bool isDark, Color textColor) {
     final subtextColor = isDark ? Colors.grey.shade500 : Colors.grey.shade500;
 
@@ -334,23 +339,20 @@ class _OrdersScreenState extends State<OrdersScreen>
       itemCount: _draftOrders.length + 1,
       separatorBuilder: (_, __) => const SizedBox(height: 14),
       itemBuilder: (context, index) {
-        // top info banner
         if (index == 0) {
-          return _buildDraftInfoBanner(isDark, textColor, subtextColor);
+          return _buildDraftBanner(isDark, textColor, subtextColor);
         }
-
         final d = _draftOrders[index - 1];
         return _buildDraftCard(d, isDark, textColor, subtextColor);
       },
     );
   }
 
-  Widget _buildDraftInfoBanner(
-    bool isDark,
-    Color textColor,
-    Color subtextColor,
-  ) {
+  Widget _buildDraftBanner(bool isDark, Color textColor, Color subtextColor) {
     final color = _isApproved ? Colors.green : Colors.orange;
+    final icon = _isApproved
+        ? Icons.verified_rounded
+        : Icons.lock_clock_rounded;
 
     return Container(
       padding: const EdgeInsets.all(16),
@@ -361,16 +363,13 @@ class _OrdersScreenState extends State<OrdersScreen>
       ),
       child: Row(
         children: [
-          Icon(
-            _isApproved ? Icons.verified_rounded : Icons.lock_clock_rounded,
-            color: color,
-          ),
+          Icon(icon, color: color),
           const SizedBox(width: 10),
           Expanded(
             child: Text(
               _isApproved
-                  ? 'Your account is verified. Next step: we can upload drafts to the system (sync feature coming next).'
-                  : 'You are not verified yet. Drafts stay on this device until verification.',
+                  ? 'You are verified. You can place these demo orders now (Home will show the option).'
+                  : 'You are not verified yet. Draft orders stay on this device until verification.',
               style: TextStyle(
                 color: textColor,
                 fontSize: 13,
@@ -468,7 +467,8 @@ class _OrdersScreenState extends State<OrdersScreen>
             ),
             GestureDetector(
               onTap: () async {
-                await _confirmDeleteDraft(d.id, isDark);
+                await DraftOrderService.deleteDraftOrder(d.id);
+                await _initTabs(); // hides Draft tab automatically if empty
               },
               child: Container(
                 width: 38,
@@ -490,221 +490,86 @@ class _OrdersScreenState extends State<OrdersScreen>
     );
   }
 
-  Future<void> _confirmDeleteDraft(String id, bool isDark) async {
-    final dialogBg = isDark ? const Color(0xFF1E1E1E) : Colors.white;
-    final dialogText = isDark ? Colors.white : const Color(0xFF1A1A1A);
-
-    final ok = await showDialog<bool>(
-      context: context,
-      builder: (_) => Dialog(
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
-        backgroundColor: dialogBg,
-        child: Padding(
-          padding: const EdgeInsets.all(24),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              Container(
-                width: 56,
-                height: 56,
-                decoration: BoxDecoration(
-                  color: Colors.red.shade50,
-                  shape: BoxShape.circle,
-                ),
-                child: Icon(
-                  Icons.delete_outline_rounded,
-                  color: Colors.red.shade500,
-                  size: 28,
-                ),
-              ),
-              const SizedBox(height: 16),
-              Text(
-                'Delete Draft?',
-                style: TextStyle(
-                  fontSize: 18,
-                  fontWeight: FontWeight.w800,
-                  color: dialogText,
-                ),
-              ),
-              const SizedBox(height: 8),
-              Text(
-                'This draft will be removed from this device.',
-                textAlign: TextAlign.center,
-                style: TextStyle(fontSize: 13, color: Colors.grey.shade500),
-              ),
-              const SizedBox(height: 18),
-              Row(
-                children: [
-                  Expanded(
-                    child: SizedBox(
-                      height: 46,
-                      child: OutlinedButton(
-                        onPressed: () => Navigator.pop(context, false),
-                        style: OutlinedButton.styleFrom(
-                          shape: RoundedRectangleBorder(
-                            borderRadius: BorderRadius.circular(12),
-                          ),
-                          side: BorderSide(
-                            color: isDark
-                                ? Colors.grey.shade700
-                                : Colors.grey.shade300,
-                          ),
-                        ),
-                        child: Text(
-                          'Cancel',
-                          style: TextStyle(
-                            color: isDark
-                                ? Colors.grey.shade400
-                                : Colors.grey.shade600,
-                            fontWeight: FontWeight.w700,
-                          ),
-                        ),
-                      ),
-                    ),
-                  ),
-                  const SizedBox(width: 12),
-                  Expanded(
-                    child: SizedBox(
-                      height: 46,
-                      child: ElevatedButton(
-                        onPressed: () => Navigator.pop(context, true),
-                        style: ElevatedButton.styleFrom(
-                          backgroundColor: Colors.red.shade500,
-                          foregroundColor: Colors.white,
-                          elevation: 0,
-                          shape: RoundedRectangleBorder(
-                            borderRadius: BorderRadius.circular(12),
-                          ),
-                        ),
-                        child: const Text(
-                          'Delete',
-                          style: TextStyle(fontWeight: FontWeight.w700),
-                        ),
-                      ),
-                    ),
-                  ),
-                ],
-              ),
-            ],
-          ),
-        ),
-      ),
-    );
-
-    if (ok == true) {
-      await DraftOrderService.deleteDraftOrder(id);
-      await _loadDrafts();
-    }
-  }
-
   void _showDraftPreview(
     DraftOrder d,
     bool isDark,
     Color textColor,
     Color subtextColor,
   ) {
-    showGeneralDialog(
+    showDialog(
       context: context,
-      barrierDismissible: true,
-      barrierLabel: 'Close',
-      barrierColor: Colors.black.withOpacity(isDark ? 0.65 : 0.45),
-      transitionDuration: const Duration(milliseconds: 250),
-      pageBuilder: (_, __, ___) => Center(
-        child: Material(
-          color: Colors.transparent,
-          child: Container(
-            width: MediaQuery.of(context).size.width * 0.88,
-            padding: const EdgeInsets.all(18),
-            decoration: BoxDecoration(
-              color: isDark ? const Color(0xFF1A1A1A) : Colors.white,
-              borderRadius: BorderRadius.circular(22),
-              border: Border.all(
-                color: isDark
-                    ? Colors.white.withOpacity(0.06)
-                    : Colors.black.withOpacity(0.06),
+      builder: (_) => Dialog(
+        backgroundColor: isDark ? const Color(0xFF1A1A1A) : Colors.white,
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+        child: Padding(
+          padding: const EdgeInsets.all(18),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                d.orderName,
+                style: TextStyle(
+                  color: textColor,
+                  fontWeight: FontWeight.w900,
+                  fontSize: 16,
+                ),
               ),
-            ),
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  d.orderName,
-                  style: TextStyle(
-                    color: textColor,
-                    fontWeight: FontWeight.w900,
-                    fontSize: 16,
-                  ),
-                ),
-                const SizedBox(height: 6),
-                Text(
-                  'Pharmacy: ${d.pharmacyName}',
-                  style: TextStyle(color: subtextColor, fontSize: 13),
-                ),
-                const SizedBox(height: 6),
-                Text(
-                  'Notes: ${d.notes.isEmpty ? "-" : d.notes}',
-                  style: TextStyle(color: subtextColor, fontSize: 13),
-                ),
-                const SizedBox(height: 10),
-                Text(
-                  'Images: ${d.images.length}',
-                  style: TextStyle(
-                    color: textColor,
-                    fontWeight: FontWeight.w800,
-                    fontSize: 13,
-                  ),
-                ),
-                const SizedBox(height: 12),
-                Wrap(
-                  spacing: 8,
-                  runSpacing: 8,
-                  children: d.images.take(3).map((img) {
-                    return ClipRRect(
+              const SizedBox(height: 6),
+              Text(
+                'Pharmacy: ${d.pharmacyName}',
+                style: TextStyle(color: subtextColor, fontSize: 13),
+              ),
+              const SizedBox(height: 6),
+              Text(
+                'Notes: ${d.notes.isEmpty ? "-" : d.notes}',
+                style: TextStyle(color: subtextColor, fontSize: 13),
+              ),
+              const SizedBox(height: 10),
+              Wrap(
+                spacing: 8,
+                runSpacing: 8,
+                children: d.images.take(3).map((img) {
+                  return ClipRRect(
+                    borderRadius: BorderRadius.circular(14),
+                    child: Image.memory(
+                      img.bytes,
+                      width: 80,
+                      height: 80,
+                      fit: BoxFit.cover,
+                    ),
+                  );
+                }).toList(),
+              ),
+              const SizedBox(height: 14),
+              SizedBox(
+                width: double.infinity,
+                height: 46,
+                child: ElevatedButton(
+                  onPressed: () => Navigator.pop(context),
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: Colors.teal.shade600,
+                    elevation: 0,
+                    shape: RoundedRectangleBorder(
                       borderRadius: BorderRadius.circular(14),
-                      child: Image.memory(
-                        img.bytes,
-                        width: 80,
-                        height: 80,
-                        fit: BoxFit.cover,
-                      ),
-                    );
-                  }).toList(),
-                ),
-                const SizedBox(height: 16),
-                SizedBox(
-                  width: double.infinity,
-                  height: 46,
-                  child: ElevatedButton(
-                    onPressed: () => Navigator.pop(context),
-                    style: ElevatedButton.styleFrom(
-                      backgroundColor: Colors.teal.shade600,
-                      elevation: 0,
-                      shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(14),
-                      ),
-                    ),
-                    child: const Text(
-                      'Close',
-                      style: TextStyle(fontWeight: FontWeight.w800),
                     ),
                   ),
+                  child: const Text(
+                    'Close',
+                    style: TextStyle(fontWeight: FontWeight.w900),
+                  ),
                 ),
-              ],
-            ),
+              ),
+            ],
           ),
         ),
-      ),
-      transitionBuilder: (_, anim, __, child) => FadeTransition(
-        opacity: CurvedAnimation(parent: anim, curve: Curves.easeOut),
-        child: child,
       ),
     );
   }
 
-  // ════════════════════════════════════════
-  // ORDER STREAM BUILDER
-  // ════════════════════════════════════════
+  // ------------------------------
+  // Streams: Recent/Active/History
+  // ------------------------------
   Widget _buildOrderStream({
     required String? userId,
     required bool Function(String status) filterFn,
@@ -764,9 +629,6 @@ class _OrdersScreenState extends State<OrdersScreen>
     );
   }
 
-  // ════════════════════════════════════════
-  // COMPACT CARD (Recent + History)
-  // ════════════════════════════════════════
   Widget _buildCompactCard(
     Map<String, dynamic> order,
     bool isDark,
@@ -896,9 +758,6 @@ class _OrdersScreenState extends State<OrdersScreen>
     );
   }
 
-  // ════════════════════════════════════════
-  // DETAILED CARD (Active tab — with tracking)
-  // ════════════════════════════════════════
   Widget _buildActiveCard(
     Map<String, dynamic> order,
     bool isDark,
@@ -939,6 +798,7 @@ class _OrdersScreenState extends State<OrdersScreen>
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
+            // header
             Row(
               mainAxisAlignment: MainAxisAlignment.spaceBetween,
               children: [
@@ -997,7 +857,10 @@ class _OrdersScreenState extends State<OrdersScreen>
                 ),
               ],
             ),
+
             const SizedBox(height: 14),
+
+            // pharmacy
             Container(
               width: double.infinity,
               padding: const EdgeInsets.all(12),
@@ -1024,7 +887,10 @@ class _OrdersScreenState extends State<OrdersScreen>
                 ],
               ),
             ),
+
             const SizedBox(height: 14),
+
+            // steps
             ...steps.asMap().entries.map((entry) {
               final step = entry.value;
               final isDone = step['done'] as bool;
@@ -1094,7 +960,10 @@ class _OrdersScreenState extends State<OrdersScreen>
                 ],
               );
             }),
+
             const SizedBox(height: 14),
+
+            // total
             Row(
               mainAxisAlignment: MainAxisAlignment.spaceBetween,
               children: [
@@ -1114,6 +983,7 @@ class _OrdersScreenState extends State<OrdersScreen>
                 ),
               ],
             ),
+
             const SizedBox(height: 10),
             Center(
               child: Text(
@@ -1131,9 +1001,6 @@ class _OrdersScreenState extends State<OrdersScreen>
     );
   }
 
-  // ════════════════════════════════════════
-  // EMPTY STATE
-  // ════════════════════════════════════════
   Widget _buildEmpty(
     String title,
     String subtitle,

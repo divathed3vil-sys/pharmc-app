@@ -1,5 +1,8 @@
+import 'dart:ui';
 import 'package:flutter/material.dart';
 import '../../services/preferences_service.dart';
+import '../../services/auth_service.dart';
+import '../../services/verification_service.dart';
 
 class EditProfileScreen extends StatefulWidget {
   const EditProfileScreen({super.key});
@@ -8,288 +11,572 @@ class EditProfileScreen extends StatefulWidget {
   State<EditProfileScreen> createState() => _EditProfileScreenState();
 }
 
-class _EditProfileScreenState extends State<EditProfileScreen> {
+class _EditProfileScreenState extends State<EditProfileScreen>
+    with SingleTickerProviderStateMixin {
   final TextEditingController _nameController = TextEditingController();
   final TextEditingController _ageController = TextEditingController();
   final TextEditingController _phoneController = TextEditingController();
-  final TextEditingController _emailController = TextEditingController();
+
+  String _email = '';
+
   bool _hasChanges = false;
+  bool _saving = false;
+  String? _error;
+
+  // ── Verification status ──
+  bool _statusLoading = true;
+  String _verificationStatus = 'unverified';
+
+  bool get _phoneLocked =>
+      _verificationStatus == 'pending' || _verificationStatus == 'approved';
+
+  late final AnimationController _fadeController;
+  late final Animation<double> _fadeAnim;
 
   @override
   void initState() {
     super.initState();
+
     _nameController.text = PreferencesService.getUserName() ?? '';
-    _ageController.text = (PreferencesService.getUserAge() ?? '').toString();
-    if (_ageController.text == '0') _ageController.text = '';
+    final age = PreferencesService.getUserAge() ?? 0;
+    _ageController.text = age == 0 ? '' : age.toString();
     _phoneController.text = PreferencesService.getUserPhone() ?? '';
-    _emailController.text = PreferencesService.getUserEmail() ?? '';
+    _email = PreferencesService.getUserEmail() ?? '';
 
     _nameController.addListener(_onChange);
     _ageController.addListener(_onChange);
-    _phoneController.addListener(_onChange);
-    _emailController.addListener(_onChange);
+
+    _fadeController = AnimationController(
+      vsync: this,
+      duration: const Duration(milliseconds: 350),
+    );
+    _fadeAnim = CurvedAnimation(parent: _fadeController, curve: Curves.easeOut);
+    _fadeController.forward();
+
+    _loadStatus();
+  }
+
+  Future<void> _loadStatus() async {
+    setState(() => _statusLoading = true);
+
+    final s = await VerificationService.getMyVerificationStatus();
+    if (!mounted) return;
+
+    setState(() {
+      _verificationStatus = s;
+      _statusLoading = false;
+    });
+
+    // Only listen to phone edits if it's not locked
+    _phoneController.removeListener(_onChange);
+    if (!_phoneLocked) {
+      _phoneController.addListener(_onChange);
+    }
   }
 
   void _onChange() {
     setState(() {
       _hasChanges = true;
+      _error = null;
     });
   }
 
   @override
   void dispose() {
+    _fadeController.dispose();
     _nameController.dispose();
     _ageController.dispose();
     _phoneController.dispose();
-    _emailController.dispose();
     super.dispose();
   }
 
-  void _save() async {
-    if (_nameController.text.trim().length >= 2) {
-      await PreferencesService.setUserName(_nameController.text.trim());
-    }
+  bool _isValidPhone(String p) => RegExp(r'^\d{9}$').hasMatch(p);
+
+  Future<void> _save() async {
+    if (_saving) return;
+
+    final fullName = _nameController.text.trim();
     final age = int.tryParse(_ageController.text.trim());
-    if (age != null && age >= 10 && age <= 120) {
-      await PreferencesService.setUserAge(age);
+    final phone = _phoneController.text.trim();
+
+    if (fullName.length < 2) {
+      setState(() => _error = 'Please enter your full name.');
+      return;
     }
-    if (_phoneController.text.trim().length == 9) {
-      await PreferencesService.setUserPhone(_phoneController.text.trim());
+    if (_ageController.text.trim().isNotEmpty &&
+        (age == null || age < 10 || age > 120)) {
+      setState(() => _error = 'Please enter a valid age.');
+      return;
     }
-    if (_emailController.text.trim().isNotEmpty) {
-      await PreferencesService.setUserEmail(_emailController.text.trim());
+    if (!_phoneLocked && phone.isNotEmpty && !_isValidPhone(phone)) {
+      setState(() => _error = 'Phone number must be 9 digits.');
+      return;
     }
-    if (mounted) {
+
+    setState(() => _saving = true);
+
+    try {
+      await AuthService.updateProfile(
+        fullName: fullName,
+        age: age,
+        phone: _phoneLocked ? null : (phone.isEmpty ? null : phone),
+      );
+
+      if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
           content: const Text('Profile updated'),
           backgroundColor: Colors.teal.shade600,
           behavior: SnackBarBehavior.floating,
           shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(10),
+            borderRadius: BorderRadius.circular(12),
           ),
         ),
       );
       Navigator.pop(context);
+    } catch (e) {
+      setState(() => _error = 'Failed to save changes. Try again.');
+    } finally {
+      if (mounted) setState(() => _saving = false);
     }
   }
 
   @override
   Widget build(BuildContext context) {
     final bool isDark = Theme.of(context).brightness == Brightness.dark;
-    final Color textColor = isDark ? Colors.white : const Color(0xFF1A1A1A);
-    // ignore: unused_local_variable
-    final Color subtextColor = isDark
-        ? Colors.grey.shade400
-        : Colors.grey.shade500;
-    final Color inputBg = isDark
-        ? const Color(0xFF1E1E1E)
-        : const Color(0xFFF5F5F5);
-    final Color backBg = isDark
-        ? const Color(0xFF2A2A2A)
-        : const Color(0xFFF5F5F5);
-    final Color hintColor = isDark
-        ? Colors.grey.shade600
-        : Colors.grey.shade400;
-    final Color iconColor = isDark
-        ? Colors.grey.shade400
-        : Colors.grey.shade500;
-    final Color labelColor = isDark
-        ? Colors.grey.shade400
-        : Colors.grey.shade600;
-    final Color prefixColor = isDark
-        ? Colors.grey.shade400
-        : Colors.grey.shade600;
+    final bg = isDark ? const Color(0xFF0F0F0F) : const Color(0xFFFAFAFA);
+    final text = isDark ? Colors.white : const Color(0xFF1A1A1A);
+    final sub = isDark ? Colors.grey.shade500 : Colors.grey.shade600;
 
     return Scaffold(
-      backgroundColor: Theme.of(context).scaffoldBackgroundColor,
+      backgroundColor: bg,
       appBar: AppBar(
-        leading: GestureDetector(
-          onTap: () => Navigator.pop(context),
-          child: Container(
-            margin: const EdgeInsets.all(8),
-            decoration: BoxDecoration(
-              color: backBg,
-              borderRadius: BorderRadius.circular(12),
-            ),
-            child: Icon(Icons.arrow_back_rounded, color: textColor, size: 20),
-          ),
+        backgroundColor: bg,
+        elevation: 0,
+        leading: IconButton(
+          icon: Icon(Icons.arrow_back_rounded, color: text),
+          onPressed: () => Navigator.pop(context),
         ),
         title: Text(
           'Edit Profile',
-          style: TextStyle(
-            fontSize: 18,
-            fontWeight: FontWeight.w600,
-            color: textColor,
-          ),
+          style: TextStyle(color: text, fontWeight: FontWeight.w800),
         ),
         centerTitle: true,
+        actions: [
+          IconButton(
+            tooltip: 'Refresh status',
+            onPressed: _loadStatus,
+            icon: Icon(Icons.refresh_rounded, color: sub),
+          ),
+        ],
       ),
-      body: SingleChildScrollView(
-        physics: const BouncingScrollPhysics(),
-        padding: const EdgeInsets.symmetric(horizontal: 24),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            const SizedBox(height: 24),
-            _buildLabel('Full Name', labelColor),
-            const SizedBox(height: 8),
-            _buildField(
-              controller: _nameController,
-              hint: 'Your full name',
-              icon: Icons.person_outline_rounded,
-              keyboardType: TextInputType.name,
-              textCapitalization: TextCapitalization.words,
-              inputBg: inputBg,
-              hintColor: hintColor,
-              iconColor: iconColor,
-              textColor: textColor,
-            ),
-            const SizedBox(height: 20),
-            _buildLabel('Age', labelColor),
-            const SizedBox(height: 8),
-            _buildField(
-              controller: _ageController,
-              hint: 'Your age',
-              icon: Icons.cake_outlined,
-              keyboardType: TextInputType.number,
-              inputBg: inputBg,
-              hintColor: hintColor,
-              iconColor: iconColor,
-              textColor: textColor,
-            ),
-            const SizedBox(height: 20),
-            _buildLabel('Phone Number', labelColor),
-            const SizedBox(height: 8),
-            Container(
-              decoration: BoxDecoration(
-                color: inputBg,
-                borderRadius: BorderRadius.circular(14),
-              ),
-              child: TextField(
-                controller: _phoneController,
-                keyboardType: TextInputType.phone,
-                style: TextStyle(
-                  fontSize: 17,
-                  fontWeight: FontWeight.w500,
-                  letterSpacing: 1.0,
-                  color: textColor,
-                ),
-                decoration: InputDecoration(
-                  hintText: '7X XXX XXXX',
-                  hintStyle: TextStyle(
-                    color: hintColor,
-                    fontWeight: FontWeight.w400,
-                  ),
-                  prefixIcon: Padding(
-                    padding: const EdgeInsets.only(left: 16, right: 8),
-                    child: Text(
-                      '+94',
-                      style: TextStyle(
-                        fontSize: 17,
-                        fontWeight: FontWeight.w500,
-                        color: prefixColor,
+      body: FadeTransition(
+        opacity: _fadeAnim,
+        child: SafeArea(
+          child: SingleChildScrollView(
+            physics: const BouncingScrollPhysics(),
+            padding: const EdgeInsets.fromLTRB(16, 6, 16, 24),
+            child: Column(
+              children: [
+                // ── Profile picture placeholder ──
+                _glassCard(
+                  isDark: isDark,
+                  child: Row(
+                    children: [
+                      Container(
+                        width: 56,
+                        height: 56,
+                        decoration: BoxDecoration(
+                          color: Colors.teal.withOpacity(isDark ? 0.18 : 0.12),
+                          borderRadius: BorderRadius.circular(18),
+                          border: Border.all(
+                            color: Colors.teal.withOpacity(0.22),
+                          ),
+                        ),
+                        child: Icon(
+                          Icons.person_rounded,
+                          color: Colors.teal.shade400,
+                          size: 26,
+                        ),
                       ),
+                      const SizedBox(width: 12),
+                      Expanded(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text(
+                              'Profile picture',
+                              style: TextStyle(
+                                color: text,
+                                fontWeight: FontWeight.w900,
+                              ),
+                            ),
+                            const SizedBox(height: 2),
+                            Text(
+                              'Coming soon',
+                              style: TextStyle(color: sub, fontSize: 12),
+                            ),
+                          ],
+                        ),
+                      ),
+                      Container(
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 10,
+                          vertical: 6,
+                        ),
+                        decoration: BoxDecoration(
+                          color: Colors.orange.withOpacity(0.12),
+                          borderRadius: BorderRadius.circular(99),
+                          border: Border.all(
+                            color: Colors.orange.withOpacity(0.2),
+                          ),
+                        ),
+                        child: Text(
+                          'Soon',
+                          style: TextStyle(
+                            color: Colors.orange.shade600,
+                            fontWeight: FontWeight.w900,
+                            fontSize: 12,
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+                const SizedBox(height: 12),
+
+                // ── Fields card ──
+                _glassCard(
+                  isDark: isDark,
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      _field(
+                        isDark: isDark,
+                        text: text,
+                        sub: sub,
+                        controller: _nameController,
+                        icon: Icons.person_outline_rounded,
+                        hint: 'Full name',
+                        keyboardType: TextInputType.name,
+                      ),
+                      const SizedBox(height: 10),
+                      _field(
+                        isDark: isDark,
+                        text: text,
+                        sub: sub,
+                        controller: _ageController,
+                        icon: Icons.cake_outlined,
+                        hint: 'Age',
+                        keyboardType: TextInputType.number,
+                      ),
+                      const SizedBox(height: 10),
+                      _phoneField(isDark, text, sub),
+
+                      // ── Phone locked notice ──
+                      if (_phoneLocked || _statusLoading) ...[
+                        const SizedBox(height: 8),
+                        Row(
+                          children: [
+                            if (_statusLoading)
+                              SizedBox(
+                                width: 14,
+                                height: 14,
+                                child: CircularProgressIndicator(
+                                  strokeWidth: 2,
+                                  color: Colors.orange.shade400,
+                                ),
+                              )
+                            else
+                              Icon(
+                                Icons.lock_rounded,
+                                size: 14,
+                                color: Colors.orange.shade400,
+                              ),
+                            const SizedBox(width: 6),
+                            Expanded(
+                              child: Text(
+                                _statusLoading
+                                    ? 'Checking verification status...'
+                                    : 'Phone number is locked while verification is pending/approved.',
+                                style: TextStyle(
+                                  fontSize: 12,
+                                  color: Colors.orange.shade400,
+                                  fontWeight: FontWeight.w800,
+                                ),
+                              ),
+                            ),
+                          ],
+                        ),
+                      ],
+
+                      const SizedBox(height: 10),
+
+                      // ── Email read-only ──
+                      Container(
+                        width: double.infinity,
+                        padding: const EdgeInsets.all(16),
+                        decoration: BoxDecoration(
+                          color: isDark
+                              ? Colors.white.withOpacity(0.06)
+                              : Colors.black.withOpacity(0.03),
+                          borderRadius: BorderRadius.circular(16),
+                          border: Border.all(
+                            color: isDark
+                                ? Colors.white.withOpacity(0.10)
+                                : Colors.black.withOpacity(0.06),
+                          ),
+                        ),
+                        child: Row(
+                          children: [
+                            Icon(Icons.email_outlined, color: sub),
+                            const SizedBox(width: 10),
+                            Expanded(
+                              child: Text(
+                                _email.isEmpty ? 'No email' : _email,
+                                style: TextStyle(
+                                  color: text,
+                                  fontWeight: FontWeight.w700,
+                                ),
+                              ),
+                            ),
+                            Container(
+                              padding: const EdgeInsets.symmetric(
+                                horizontal: 10,
+                                vertical: 6,
+                              ),
+                              decoration: BoxDecoration(
+                                color: Colors.grey.withOpacity(0.12),
+                                borderRadius: BorderRadius.circular(99),
+                                border: Border.all(
+                                  color: Colors.grey.withOpacity(0.2),
+                                ),
+                              ),
+                              child: Text(
+                                'Read only',
+                                style: TextStyle(
+                                  color: sub,
+                                  fontWeight: FontWeight.w900,
+                                  fontSize: 12,
+                                ),
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+
+                // ── Error message ──
+                if (_error != null) ...[
+                  const SizedBox(height: 12),
+                  _glassCard(
+                    isDark: isDark,
+                    child: Row(
+                      children: [
+                        Icon(
+                          Icons.error_outline_rounded,
+                          color: Colors.red.shade400,
+                        ),
+                        const SizedBox(width: 10),
+                        Expanded(
+                          child: Text(
+                            _error!,
+                            style: TextStyle(
+                              color: Colors.red.shade300,
+                              fontWeight: FontWeight.w800,
+                            ),
+                          ),
+                        ),
+                      ],
                     ),
                   ),
-                  prefixIconConstraints: const BoxConstraints(
-                    minWidth: 0,
-                    minHeight: 0,
-                  ),
-                  border: InputBorder.none,
-                  contentPadding: const EdgeInsets.symmetric(
-                    horizontal: 16,
-                    vertical: 18,
-                  ),
-                ),
-              ),
-            ),
-            const SizedBox(height: 20),
-            _buildLabel('Email Address', labelColor),
-            const SizedBox(height: 8),
-            _buildField(
-              controller: _emailController,
-              hint: 'your@email.com',
-              icon: Icons.email_outlined,
-              keyboardType: TextInputType.emailAddress,
-              inputBg: inputBg,
-              hintColor: hintColor,
-              iconColor: iconColor,
-              textColor: textColor,
-            ),
-            const SizedBox(height: 40),
-            // Save button
-            SizedBox(
-              width: double.infinity,
-              height: 56,
-              child: ElevatedButton(
-                onPressed: _hasChanges ? _save : null,
-                style: ElevatedButton.styleFrom(
-                  backgroundColor: Colors.teal.shade600,
-                  disabledBackgroundColor: isDark
-                      ? Colors.teal.shade900
-                      : Colors.teal.shade100,
-                  foregroundColor: Colors.white,
-                  disabledForegroundColor: Colors.white60,
-                  elevation: 0,
-                  shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(14),
+                ],
+
+                // ── Save button ──
+                const SizedBox(height: 14),
+                SizedBox(
+                  width: double.infinity,
+                  height: 54,
+                  child: ElevatedButton(
+                    onPressed: (!_hasChanges || _saving) ? null : _save,
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: Colors.teal.shade600,
+                      disabledBackgroundColor: isDark
+                          ? Colors.white.withOpacity(0.10)
+                          : Colors.grey.shade200,
+                      foregroundColor: Colors.white,
+                      elevation: 0,
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(18),
+                      ),
+                    ),
+                    child: _saving
+                        ? const SizedBox(
+                            width: 22,
+                            height: 22,
+                            child: CircularProgressIndicator(
+                              strokeWidth: 2.2,
+                              color: Colors.white,
+                            ),
+                          )
+                        : const Text(
+                            'Save changes',
+                            style: TextStyle(
+                              fontWeight: FontWeight.w900,
+                              fontSize: 15,
+                            ),
+                          ),
                   ),
                 ),
-                child: const Text(
-                  'Save Changes',
-                  style: TextStyle(fontSize: 17, fontWeight: FontWeight.w600),
-                ),
-              ),
+              ],
             ),
-            const SizedBox(height: 32),
-          ],
+          ),
         ),
       ),
     );
   }
 
-  Widget _buildLabel(String text, Color color) {
-    return Text(
-      text,
-      style: TextStyle(fontSize: 14, fontWeight: FontWeight.w600, color: color),
-    );
-  }
-
-  Widget _buildField({
+  Widget _field({
+    required bool isDark,
+    required Color text,
+    required Color sub,
     required TextEditingController controller,
-    required String hint,
     required IconData icon,
-    required Color inputBg,
-    required Color hintColor,
-    required Color iconColor,
-    required Color textColor,
-    TextInputType keyboardType = TextInputType.text,
-    TextCapitalization textCapitalization = TextCapitalization.none,
+    required String hint,
+    required TextInputType keyboardType,
   }) {
+    final inputBg = isDark
+        ? Colors.white.withOpacity(0.06)
+        : Colors.black.withOpacity(0.03);
+
     return Container(
       decoration: BoxDecoration(
         color: inputBg,
-        borderRadius: BorderRadius.circular(14),
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(
+          color: isDark
+              ? Colors.white.withOpacity(0.10)
+              : Colors.black.withOpacity(0.06),
+        ),
       ),
       child: TextField(
         controller: controller,
         keyboardType: keyboardType,
-        textCapitalization: textCapitalization,
-        style: TextStyle(
-          fontSize: 17,
-          fontWeight: FontWeight.w500,
-          color: textColor,
-        ),
+        style: TextStyle(color: text, fontWeight: FontWeight.w700),
         decoration: InputDecoration(
           hintText: hint,
-          hintStyle: TextStyle(color: hintColor, fontWeight: FontWeight.w400),
-          prefixIcon: Icon(icon, color: iconColor, size: 22),
+          hintStyle: TextStyle(color: sub),
+          prefixIcon: Icon(icon, color: sub),
           border: InputBorder.none,
-          contentPadding: const EdgeInsets.symmetric(
-            horizontal: 16,
-            vertical: 18,
+          contentPadding: const EdgeInsets.all(16),
+        ),
+      ),
+    );
+  }
+
+  Widget _phoneField(bool isDark, Color text, Color sub) {
+    final inputBg = isDark
+        ? Colors.white.withOpacity(0.06)
+        : Colors.black.withOpacity(0.03);
+
+    final lockedBg = isDark
+        ? Colors.white.withOpacity(0.03)
+        : Colors.black.withOpacity(0.02);
+
+    return Opacity(
+      opacity: _phoneLocked ? 0.55 : 1.0,
+      child: Row(
+        children: [
+          Container(
+            height: 56,
+            padding: const EdgeInsets.symmetric(horizontal: 14),
+            decoration: BoxDecoration(
+              color: _phoneLocked ? lockedBg : inputBg,
+              borderRadius: const BorderRadius.only(
+                topLeft: Radius.circular(16),
+                bottomLeft: Radius.circular(16),
+              ),
+              border: Border.all(
+                color: isDark
+                    ? Colors.white.withOpacity(0.10)
+                    : Colors.black.withOpacity(0.06),
+              ),
+            ),
+            child: Center(
+              child: Text(
+                '+94',
+                style: TextStyle(color: text, fontWeight: FontWeight.w900),
+              ),
+            ),
           ),
+          Expanded(
+            child: Container(
+              height: 56,
+              decoration: BoxDecoration(
+                color: _phoneLocked ? lockedBg : inputBg,
+                borderRadius: const BorderRadius.only(
+                  topRight: Radius.circular(16),
+                  bottomRight: Radius.circular(16),
+                ),
+                border: Border.all(
+                  color: isDark
+                      ? Colors.white.withOpacity(0.10)
+                      : Colors.black.withOpacity(0.06),
+                ),
+              ),
+              child: TextField(
+                controller: _phoneController,
+                maxLength: 9,
+                enabled: !_phoneLocked,
+                keyboardType: TextInputType.phone,
+                style: TextStyle(color: text, fontWeight: FontWeight.w700),
+                decoration: InputDecoration(
+                  counterText: '',
+                  hintText: _phoneLocked ? 'Locked' : '771234567',
+                  hintStyle: TextStyle(color: sub),
+                  border: InputBorder.none,
+                  contentPadding: const EdgeInsets.symmetric(
+                    horizontal: 14,
+                    vertical: 16,
+                  ),
+                  suffixIcon: _phoneLocked
+                      ? Icon(
+                          Icons.lock_rounded,
+                          size: 18,
+                          color: Colors.orange.shade400,
+                        )
+                      : null,
+                ),
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _glassCard({required bool isDark, required Widget child}) {
+    return ClipRRect(
+      borderRadius: BorderRadius.circular(22),
+      child: BackdropFilter(
+        filter: ImageFilter.blur(sigmaX: 18, sigmaY: 18),
+        child: Container(
+          width: double.infinity,
+          padding: const EdgeInsets.all(18),
+          decoration: BoxDecoration(
+            color: isDark
+                ? Colors.white.withOpacity(0.06)
+                : Colors.white.withOpacity(0.92),
+            borderRadius: BorderRadius.circular(22),
+            border: Border.all(
+              color: isDark
+                  ? Colors.white.withOpacity(0.08)
+                  : Colors.black.withOpacity(0.05),
+            ),
+          ),
+          child: child,
         ),
       ),
     );
