@@ -33,8 +33,8 @@ class _PaymentScreenState extends State<PaymentScreen>
 
   // ── Prescription viewer state ──
   final PageController _prescriptionPageController = PageController();
-  int _currentPrescriptionPage = 0;
-  bool _showingPrescription = false;
+  final int _currentPrescriptionPage = 0;
+  final bool _showingPrescription = false;
   String? _viewingOrderId;
 
   @override
@@ -249,8 +249,9 @@ class _PaymentScreenState extends State<PaymentScreen>
                           }
 
                           final allOrders = snapshot.data ?? [];
-                          if (allOrders.isEmpty)
+                          if (allOrders.isEmpty) {
                             return _buildEmptyState(isDark);
+                          }
 
                           final isPending = _activeTab == 0;
                           final filtered = _filterOrders(allOrders, isPending);
@@ -1172,7 +1173,7 @@ class _PaymentScreenState extends State<PaymentScreen>
                         return Image.network(
                           urlSnap.data!,
                           fit: BoxFit.cover,
-                          errorBuilder: (_, __, ___) => Center(
+                          errorBuilder: (_, _, _) => Center(
                             child: Icon(
                               Icons.broken_image_rounded,
                               color: subtextColor,
@@ -1207,12 +1208,12 @@ class _PaymentScreenState extends State<PaymentScreen>
       barrierLabel: 'Close',
       barrierColor: Colors.transparent,
       transitionDuration: const Duration(milliseconds: 350),
-      pageBuilder: (_, __, ___) => _PrescriptionViewer(
+      pageBuilder: (_, _, _) => _PrescriptionViewer(
         images: images,
         initialIndex: initialIndex,
         getSignedUrl: _getSignedUrl,
       ),
-      transitionBuilder: (_, anim, __, child) {
+      transitionBuilder: (_, anim, _, child) {
         return FadeTransition(
           opacity: CurvedAnimation(parent: anim, curve: Curves.easeOut),
           child: child,
@@ -1499,7 +1500,7 @@ class _PrescriptionViewerState extends State<_PrescriptionViewer> {
                                 return Image.network(
                                   snapshot.data!,
                                   fit: BoxFit.contain,
-                                  errorBuilder: (_, __, ___) => Center(
+                                  errorBuilder: (_, _, _) => Center(
                                     child: Icon(
                                       Icons.broken_image_rounded,
                                       size: 48,

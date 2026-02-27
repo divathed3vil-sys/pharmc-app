@@ -54,9 +54,9 @@ class _SettingsScreenState extends State<SettingsScreen>
     Navigator.pushAndRemoveUntil(
       context,
       PageRouteBuilder(
-        pageBuilder: (_, __, ___) => const LoginScreen(),
+        pageBuilder: (_, _, _) => const LoginScreen(),
         transitionDuration: const Duration(milliseconds: 400),
-        transitionsBuilder: (_, animation, __, child) =>
+        transitionsBuilder: (_, animation, _, child) =>
             FadeTransition(opacity: animation, child: child),
       ),
       (route) => false,
@@ -77,7 +77,7 @@ class _SettingsScreenState extends State<SettingsScreen>
       barrierLabel: 'Logout',
       barrierColor: Colors.black.withOpacity(isDark ? 0.6 : 0.4),
       transitionDuration: const Duration(milliseconds: 250),
-      pageBuilder: (_, __, ___) => Center(
+      pageBuilder: (_, _, _) => Center(
         child: Material(
           color: Colors.transparent,
           child: _glassDialog(
@@ -152,7 +152,7 @@ class _SettingsScreenState extends State<SettingsScreen>
           ),
         ),
       ),
-      transitionBuilder: (_, anim, __, child) => FadeTransition(
+      transitionBuilder: (_, anim, _, child) => FadeTransition(
         opacity: CurvedAnimation(parent: anim, curve: Curves.easeOut),
         child: child,
       ),
@@ -229,7 +229,7 @@ class _SettingsScreenState extends State<SettingsScreen>
       barrierLabel: 'Delete account',
       barrierColor: Colors.black.withOpacity(isDark ? 0.65 : 0.45),
       transitionDuration: const Duration(milliseconds: 250),
-      pageBuilder: (_, __, ___) {
+      pageBuilder: (_, _, _) {
         return Center(
           child: Material(
             color: Colors.transparent,
@@ -479,7 +479,7 @@ class _SettingsScreenState extends State<SettingsScreen>
           ),
         );
       },
-      transitionBuilder: (_, anim, __, child) => FadeTransition(
+      transitionBuilder: (_, anim, _, child) => FadeTransition(
         opacity: CurvedAnimation(parent: anim, curve: Curves.easeOut),
         child: child,
       ),

@@ -173,9 +173,9 @@ class AuthService {
 
     final updates = <String, dynamic>{
       'updated_at': DateTime.now().toIso8601String(),
-      if (fullName != null) 'full_name': fullName,
-      if (age != null) 'age': age,
-      if (phone != null) 'phone': phone,
+      'full_name': ?fullName,
+      'age': ?age,
+      'phone': ?phone,
     };
 
     await _client.from('profiles').update(updates).eq('id', user.id);

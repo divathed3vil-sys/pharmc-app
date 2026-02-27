@@ -832,7 +832,7 @@ class _OrderTrackingPopupState extends State<OrderTrackingPopup>
                               return Image.network(
                                 snapshot.data!,
                                 fit: BoxFit.contain,
-                                errorBuilder: (_, __, ___) => Center(
+                                errorBuilder: (_, _, _) => Center(
                                   child: Icon(
                                     Icons.broken_image_rounded,
                                     size: 48,

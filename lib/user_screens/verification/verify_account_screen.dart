@@ -93,8 +93,8 @@ class _VerifyAccountScreenState extends State<VerifyAccountScreen>
 
   Route _smoothRoute(Widget page) {
     return PageRouteBuilder(
-      pageBuilder: (_, __, ___) => page,
-      transitionsBuilder: (_, anim, __, child) {
+      pageBuilder: (_, _, _) => page,
+      transitionsBuilder: (_, anim, _, child) {
         return FadeTransition(
           opacity: CurvedAnimation(parent: anim, curve: Curves.easeOut),
           child: SlideTransition(

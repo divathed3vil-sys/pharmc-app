@@ -143,7 +143,7 @@ class _OrdersScreenState extends State<OrdersScreen>
           physics: const BouncingScrollPhysics(),
           padding: const EdgeInsets.all(24),
           itemCount: orders.length,
-          separatorBuilder: (_, __) => const SizedBox(height: 16),
+          separatorBuilder: (_, _) => const SizedBox(height: 16),
           itemBuilder: (context, index) {
             return isActive
                 ? _buildActiveCard(orders[index], isDark, textColor)

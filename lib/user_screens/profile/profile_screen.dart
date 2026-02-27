@@ -122,8 +122,8 @@ class _ProfileScreenState extends State<ProfileScreen>
 
   Route _smoothRoute(Widget page) {
     return PageRouteBuilder(
-      pageBuilder: (_, __, ___) => page,
-      transitionsBuilder: (_, anim, __, child) {
+      pageBuilder: (_, _, _) => page,
+      transitionsBuilder: (_, anim, _, child) {
         return FadeTransition(
           opacity: CurvedAnimation(parent: anim, curve: Curves.easeOut),
           child: SlideTransition(
@@ -540,7 +540,7 @@ class _ProfileScreenState extends State<ProfileScreen>
       barrierLabel: 'Support',
       barrierColor: Colors.black.withOpacity(isDark ? 0.6 : 0.4),
       transitionDuration: const Duration(milliseconds: 250),
-      pageBuilder: (_, __, ___) => Center(
+      pageBuilder: (_, _, _) => Center(
         child: Material(
           color: Colors.transparent,
           child: _glassDialog(
@@ -611,7 +611,7 @@ class _ProfileScreenState extends State<ProfileScreen>
           ),
         ),
       ),
-      transitionBuilder: (_, anim, __, child) => FadeTransition(
+      transitionBuilder: (_, anim, _, child) => FadeTransition(
         opacity: CurvedAnimation(parent: anim, curve: Curves.easeOut),
         child: child,
       ),

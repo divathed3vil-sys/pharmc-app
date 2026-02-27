@@ -195,7 +195,7 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
       barrierLabel: 'Not verified',
       barrierColor: Colors.black.withOpacity(isDark ? 0.60 : 0.40),
       transitionDuration: const Duration(milliseconds: 250),
-      pageBuilder: (_, __, ___) => Center(
+      pageBuilder: (_, _, _) => Center(
         child: Material(
           color: Colors.transparent,
           child: ClipRRect(
@@ -343,7 +343,7 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
           ),
         ),
       ),
-      transitionBuilder: (_, anim, __, child) => FadeTransition(
+      transitionBuilder: (_, anim, _, child) => FadeTransition(
         opacity: CurvedAnimation(parent: anim, curve: Curves.easeOut),
         child: child,
       ),
@@ -417,7 +417,7 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
       barrierLabel: 'Draft decision',
       barrierColor: Colors.black.withOpacity(isDark ? 0.65 : 0.45),
       transitionDuration: const Duration(milliseconds: 250),
-      pageBuilder: (_, __, ___) {
+      pageBuilder: (_, _, _) {
         return Center(
           child: Material(
             color: Colors.transparent,
@@ -538,7 +538,7 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
           ),
         );
       },
-      transitionBuilder: (_, anim, __, child) => FadeTransition(
+      transitionBuilder: (_, anim, _, child) => FadeTransition(
         opacity: CurvedAnimation(parent: anim, curve: Curves.easeOut),
         child: child,
       ),
@@ -1265,8 +1265,8 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
   // ════════════════════════════════════════
   Route _smoothRoute(Widget page) {
     return PageRouteBuilder(
-      pageBuilder: (_, __, ___) => page,
-      transitionsBuilder: (_, anim, __, child) {
+      pageBuilder: (_, _, _) => page,
+      transitionsBuilder: (_, anim, _, child) {
         return FadeTransition(
           opacity: CurvedAnimation(parent: anim, curve: Curves.easeOut),
           child: SlideTransition(

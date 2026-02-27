@@ -229,7 +229,7 @@ class _ExploreProductsScreenState extends State<ExploreProductsScreen>
                 physics: const BouncingScrollPhysics(),
                 padding: const EdgeInsets.symmetric(horizontal: 24),
                 itemCount: _categories.length,
-                separatorBuilder: (_, __) => const SizedBox(width: 8),
+                separatorBuilder: (_, _) => const SizedBox(width: 8),
                 itemBuilder: (context, index) {
                   final cat = _categories[index];
                   final isSelected = _selectedCategory == cat['name'];
