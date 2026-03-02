@@ -1,9 +1,6 @@
+import 'dart:ui';
 import 'package:flutter/material.dart';
 
-// ============================================================
-// EXPLORE PRODUCTS SCREEN
-// Full browsing experience for pharmacy & wellness products
-// ============================================================
 class ExploreProductsScreen extends StatefulWidget {
   const ExploreProductsScreen({super.key});
 
@@ -16,7 +13,6 @@ class _ExploreProductsScreenState extends State<ExploreProductsScreen>
   late AnimationController _staggerController;
   String _selectedCategory = 'All';
 
-  // ── Categories ──
   final List<Map<String, dynamic>> _categories = [
     {'name': 'All', 'icon': Icons.grid_view_rounded},
     {'name': 'Supplements', 'icon': Icons.wb_sunny_rounded},
@@ -26,7 +22,6 @@ class _ExploreProductsScreenState extends State<ExploreProductsScreen>
     {'name': 'Essentials', 'icon': Icons.medical_services_rounded},
   ];
 
-  // ── All products (replace with Supabase query later) ──
   final List<Map<String, dynamic>> _allProducts = [
     {
       'name': 'Vitamin C 1000mg',
@@ -139,6 +134,19 @@ class _ExploreProductsScreenState extends State<ExploreProductsScreen>
     _staggerController.forward();
   }
 
+  void _showComingSoon() {
+    ScaffoldMessenger.of(context).clearSnackBars();
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: const Text('Coming Soon — This feature is not available yet.'),
+        behavior: SnackBarBehavior.floating,
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+        backgroundColor: Colors.grey.shade800,
+        duration: const Duration(milliseconds: 1500),
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     final isDark = Theme.of(context).brightness == Brightness.dark;
@@ -150,186 +158,246 @@ class _ExploreProductsScreenState extends State<ExploreProductsScreen>
 
     return Scaffold(
       backgroundColor: bgColor,
-      body: SafeArea(
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            // ── App bar ──
-            Padding(
-              padding: const EdgeInsets.fromLTRB(24, 12, 24, 0),
-              child: Row(
-                children: [
-                  GestureDetector(
-                    onTap: () => Navigator.pop(context),
+      body: Stack(
+        children: [
+          SafeArea(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                // App bar
+                Padding(
+                  padding: const EdgeInsets.fromLTRB(24, 12, 24, 0),
+                  child: Row(
+                    children: [
+                      GestureDetector(
+                        onTap: () => Navigator.pop(context),
+                        child: Container(
+                          width: 40,
+                          height: 40,
+                          decoration: BoxDecoration(
+                            color: backBg,
+                            borderRadius: BorderRadius.circular(12),
+                          ),
+                          child: Icon(
+                            Icons.arrow_back_rounded,
+                            color: textColor,
+                            size: 20,
+                          ),
+                        ),
+                      ),
+                      const SizedBox(width: 14),
+                      Text(
+                        'Explore Products',
+                        style: TextStyle(
+                          fontSize: 20,
+                          fontWeight: FontWeight.w800,
+                          color: textColor,
+                          letterSpacing: -0.3,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+
+                const SizedBox(height: 16),
+
+                // Search bar
+                Padding(
+                  padding: const EdgeInsets.symmetric(horizontal: 24),
+                  child: GestureDetector(
+                    onTap: _showComingSoon,
                     child: Container(
-                      width: 40,
-                      height: 40,
-                      decoration: BoxDecoration(
-                        color: backBg,
-                        borderRadius: BorderRadius.circular(12),
-                      ),
-                      child: Icon(
-                        Icons.arrow_back_rounded,
-                        color: textColor,
-                        size: 20,
-                      ),
-                    ),
-                  ),
-                  const SizedBox(width: 14),
-                  Text(
-                    'Explore Products',
-                    style: TextStyle(
-                      fontSize: 20,
-                      fontWeight: FontWeight.w800,
-                      color: textColor,
-                      letterSpacing: -0.3,
-                    ),
-                  ),
-                ],
-              ),
-            ),
-
-            const SizedBox(height: 16),
-
-            // ── Search bar ──
-            Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 24),
-              child: Container(
-                padding: const EdgeInsets.symmetric(
-                  horizontal: 16,
-                  vertical: 14,
-                ),
-                decoration: BoxDecoration(
-                  color: isDark
-                      ? const Color(0xFF1E1E1E)
-                      : const Color(0xFFF0F0F0),
-                  borderRadius: BorderRadius.circular(16),
-                ),
-                child: Row(
-                  children: [
-                    Icon(Icons.search_rounded, color: subtextColor, size: 20),
-                    const SizedBox(width: 10),
-                    Text(
-                      'Search products...',
-                      style: TextStyle(fontSize: 15, color: subtextColor),
-                    ),
-                  ],
-                ),
-              ),
-            ),
-
-            const SizedBox(height: 16),
-
-            // ── Category chips (horizontal scroll OK here,
-            //    it's a small strip, won't conflict) ──
-            SizedBox(
-              height: 42,
-              child: ListView.separated(
-                scrollDirection: Axis.horizontal,
-                physics: const BouncingScrollPhysics(),
-                padding: const EdgeInsets.symmetric(horizontal: 24),
-                itemCount: _categories.length,
-                separatorBuilder: (_, _) => const SizedBox(width: 8),
-                itemBuilder: (context, index) {
-                  final cat = _categories[index];
-                  final isSelected = _selectedCategory == cat['name'];
-
-                  return GestureDetector(
-                    onTap: () => _onCategoryTap(cat['name'] as String),
-                    child: AnimatedContainer(
-                      duration: const Duration(milliseconds: 250),
-                      curve: Curves.easeOut,
                       padding: const EdgeInsets.symmetric(
                         horizontal: 16,
-                        vertical: 10,
+                        vertical: 14,
                       ),
                       decoration: BoxDecoration(
-                        color: isSelected
-                            ? Colors.teal.shade600
-                            : (isDark
-                                  ? const Color(0xFF1E1E1E)
-                                  : const Color(0xFFF0F0F0)),
-                        borderRadius: BorderRadius.circular(12),
-                        border: Border.all(
-                          color: isSelected
-                              ? Colors.teal.shade600
-                              : Colors.transparent,
-                        ),
+                        color: backBg,
+                        borderRadius: BorderRadius.circular(16),
                       ),
                       child: Row(
                         children: [
                           Icon(
-                            cat['icon'] as IconData,
-                            size: 16,
-                            color: isSelected ? Colors.white : subtextColor,
+                            Icons.search_rounded,
+                            color: subtextColor,
+                            size: 20,
                           ),
-                          const SizedBox(width: 6),
+                          const SizedBox(width: 10),
                           Text(
-                            cat['name'] as String,
-                            style: TextStyle(
-                              fontSize: 13,
-                              fontWeight: FontWeight.w600,
-                              color: isSelected ? Colors.white : subtextColor,
-                            ),
+                            'Search products...',
+                            style: TextStyle(fontSize: 15, color: subtextColor),
                           ),
                         ],
                       ),
                     ),
-                  );
-                },
-              ),
-            ),
-
-            const SizedBox(height: 16),
-
-            // ── Products grid ──
-            Expanded(
-              child: GridView.builder(
-                physics: const BouncingScrollPhysics(),
-                padding: const EdgeInsets.fromLTRB(24, 0, 24, 24),
-                gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
-                  crossAxisCount: 2,
-                  mainAxisSpacing: 14,
-                  crossAxisSpacing: 14,
-                  childAspectRatio: 0.75,
+                  ),
                 ),
-                itemCount: _filteredProducts.length,
-                itemBuilder: (context, index) {
-                  final product = _filteredProducts[index];
-                  final delay = index * 0.1;
-                  final itemAnim = CurvedAnimation(
-                    parent: _staggerController,
-                    curve: Interval(
-                      delay.clamp(0.0, 0.6),
-                      (delay + 0.4).clamp(0.0, 1.0),
-                      curve: Curves.easeOutCubic,
-                    ),
-                  );
 
-                  return AnimatedBuilder(
-                    animation: itemAnim,
-                    builder: (context, child) {
-                      return Opacity(
-                        opacity: itemAnim.value,
-                        child: Transform.translate(
-                          offset: Offset(0, 30 * (1 - itemAnim.value)),
-                          child: child,
+                const SizedBox(height: 16),
+
+                // Category chips
+                SizedBox(
+                  height: 42,
+                  child: ListView.separated(
+                    scrollDirection: Axis.horizontal,
+                    physics: const BouncingScrollPhysics(),
+                    padding: const EdgeInsets.symmetric(horizontal: 24),
+                    itemCount: _categories.length,
+                    separatorBuilder: (_, __) => const SizedBox(width: 8),
+                    itemBuilder: (context, index) {
+                      final cat = _categories[index];
+                      final isSelected = _selectedCategory == cat['name'];
+
+                      return GestureDetector(
+                        onTap: () => _onCategoryTap(cat['name'] as String),
+                        child: AnimatedContainer(
+                          duration: const Duration(milliseconds: 250),
+                          curve: Curves.easeOut,
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: 16,
+                            vertical: 10,
+                          ),
+                          decoration: BoxDecoration(
+                            color: isSelected ? Colors.teal.shade600 : backBg,
+                            borderRadius: BorderRadius.circular(12),
+                            border: Border.all(
+                              color: isSelected
+                                  ? Colors.teal.shade600
+                                  : Colors.transparent,
+                            ),
+                          ),
+                          child: Row(
+                            children: [
+                              Icon(
+                                cat['icon'] as IconData,
+                                size: 16,
+                                color: isSelected ? Colors.white : subtextColor,
+                              ),
+                              const SizedBox(width: 6),
+                              Text(
+                                cat['name'] as String,
+                                style: TextStyle(
+                                  fontSize: 13,
+                                  fontWeight: FontWeight.w600,
+                                  color: isSelected
+                                      ? Colors.white
+                                      : subtextColor,
+                                ),
+                              ),
+                            ],
+                          ),
                         ),
                       );
                     },
-                    child: _buildExploreCard(
-                      product,
-                      isDark,
-                      cardColor,
-                      textColor,
-                      subtextColor,
+                  ),
+                ),
+
+                const SizedBox(height: 16),
+
+                // Products grid (dimmed for coming soon)
+                Expanded(
+                  child: GridView.builder(
+                    physics: const BouncingScrollPhysics(),
+                    padding: const EdgeInsets.fromLTRB(24, 0, 24, 100),
+                    gridDelegate:
+                        const SliverGridDelegateWithFixedCrossAxisCount(
+                          crossAxisCount: 2,
+                          mainAxisSpacing: 14,
+                          crossAxisSpacing: 14,
+                          childAspectRatio: 0.75,
+                        ),
+                    itemCount: _filteredProducts.length,
+                    itemBuilder: (context, index) {
+                      final product = _filteredProducts[index];
+                      final delay = index * 0.1;
+                      final itemAnim = CurvedAnimation(
+                        parent: _staggerController,
+                        curve: Interval(
+                          delay.clamp(0.0, 0.6),
+                          (delay + 0.4).clamp(0.0, 1.0),
+                          curve: Curves.easeOutCubic,
+                        ),
+                      );
+
+                      return AnimatedBuilder(
+                        animation: itemAnim,
+                        builder: (context, child) {
+                          return Opacity(
+                            opacity: itemAnim.value * 0.5,
+                            child: Transform.translate(
+                              offset: Offset(0, 30 * (1 - itemAnim.value)),
+                              child: child,
+                            ),
+                          );
+                        },
+                        child: GestureDetector(
+                          onTap: _showComingSoon,
+                          child: _buildExploreCard(
+                            product,
+                            isDark,
+                            cardColor,
+                            textColor,
+                            subtextColor,
+                          ),
+                        ),
+                      );
+                    },
+                  ),
+                ),
+              ],
+            ),
+          ),
+
+          // Coming Soon overlay at bottom
+          Positioned(
+            bottom: 24,
+            left: 20,
+            right: 20,
+            child: ClipRRect(
+              borderRadius: BorderRadius.circular(22),
+              child: BackdropFilter(
+                filter: ImageFilter.blur(sigmaX: 20, sigmaY: 20),
+                child: Container(
+                  padding: const EdgeInsets.symmetric(
+                    vertical: 18,
+                    horizontal: 24,
+                  ),
+                  decoration: BoxDecoration(
+                    color: isDark
+                        ? Colors.white.withOpacity(0.10)
+                        : Colors.black.withOpacity(0.06),
+                    borderRadius: BorderRadius.circular(22),
+                    border: Border.all(
+                      color: isDark
+                          ? Colors.white.withOpacity(0.12)
+                          : Colors.black.withOpacity(0.08),
                     ),
-                  );
-                },
+                  ),
+                  child: Row(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: [
+                      Icon(
+                        Icons.storefront_rounded,
+                        color: Colors.teal.shade400,
+                        size: 22,
+                      ),
+                      const SizedBox(width: 12),
+                      Text(
+                        'Store Opening Soon',
+                        style: TextStyle(
+                          fontSize: 16,
+                          fontWeight: FontWeight.w800,
+                          color: isDark ? Colors.white : Colors.black87,
+                          letterSpacing: -0.3,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
               ),
             ),
-          ],
-        ),
+          ),
+        ],
       ),
     );
   }
@@ -365,7 +433,6 @@ class _ExploreProductsScreenState extends State<ExploreProductsScreen>
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          // ── Icon ──
           Container(
             width: 48,
             height: 48,
@@ -379,10 +446,7 @@ class _ExploreProductsScreenState extends State<ExploreProductsScreen>
               size: 24,
             ),
           ),
-
           const Spacer(),
-
-          // ── Category ──
           Text(
             product['category'] as String,
             style: TextStyle(
@@ -393,8 +457,6 @@ class _ExploreProductsScreenState extends State<ExploreProductsScreen>
             ),
           ),
           const SizedBox(height: 4),
-
-          // ── Name ──
           Text(
             product['name'] as String,
             style: TextStyle(
@@ -406,20 +468,14 @@ class _ExploreProductsScreenState extends State<ExploreProductsScreen>
             maxLines: 2,
             overflow: TextOverflow.ellipsis,
           ),
-
           const SizedBox(height: 2),
-
-          // ── Description ──
           Text(
             product['desc'] as String,
             style: TextStyle(fontSize: 11, color: subtextColor),
             maxLines: 1,
             overflow: TextOverflow.ellipsis,
           ),
-
           const SizedBox(height: 10),
-
-          // ── Price row ──
           Row(
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
@@ -435,13 +491,13 @@ class _ExploreProductsScreenState extends State<ExploreProductsScreen>
                 width: 30,
                 height: 30,
                 decoration: BoxDecoration(
-                  color: Colors.teal.shade50,
+                  color: isDark ? Colors.grey.shade800 : Colors.teal.shade50,
                   borderRadius: BorderRadius.circular(8),
                 ),
                 child: Icon(
-                  Icons.add_rounded,
+                  Icons.lock_outline_rounded,
                   color: Colors.teal.shade600,
-                  size: 18,
+                  size: 16,
                 ),
               ),
             ],
