@@ -5,7 +5,7 @@ import 'package:flutter/services.dart';
 import '../../constants.dart';
 import '../../services/auth_service.dart';
 import 'create_account_screen.dart';
-import 'join_shared_account_screen.dart';
+//import 'join_shared_account_screen.dart';
 import 'blocked_account_screen.dart';
 import '../main_navigation.dart';
 
