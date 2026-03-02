@@ -17,167 +17,219 @@ class SplashScreen extends StatefulWidget {
 
 class _SplashScreenState extends State<SplashScreen>
     with TickerProviderStateMixin {
-  // ════════════════════════════════════════════════
-  // ANIMATION CONTROLLERS
-  // ════════════════════════════════════════════════
-
+  // ── Blob drift ──
   late final AnimationController _blobController;
   late final Animation<Offset> _blob1Drift;
   late final Animation<Offset> _blob2Drift;
   late final Animation<Offset> _blob3Drift;
 
-  late final AnimationController _nameController;
-  late final Animation<double> _nameFade;
-  late final Animation<double> _nameSpring;
+  // ── Initial ring ripple (expands outward before logo) ──
+  late final AnimationController _rippleController;
+  late final Animation<double> _rippleScale;
+  late final Animation<double> _rippleFade;
 
+  // ── Letter-by-letter logo entrance ──
+  late final AnimationController _nameController;
+
+  // ── Heartbeat glow ──
   late final AnimationController _glowController;
   late final Animation<double> _glowAnim;
 
+  // ── Shimmer sweep across logo ──
+  late final AnimationController _shimmerController;
+  late final Animation<double> _shimmerPos;
+
+  // ── Subtitle ──
   late final AnimationController _subtitleController;
   late final Animation<double> _subtitleFade;
   late final Animation<Offset> _subtitleSlide;
 
+  // ── Floating particles ──
+  late final AnimationController _particleController;
+
+  // ── Exit ──
   late final AnimationController _exitController;
   late final Animation<double> _exitFade;
   late final Animation<double> _exitScale;
+
+  static const String _appName = AppConstants.appName; // e.g. "PharmC"
 
   @override
   void initState() {
     super.initState();
 
-    // ── Background blobs ──
+    // ─── Blobs ───────────────────────────────────────
     _blobController = AnimationController(
       vsync: this,
-      duration: const Duration(milliseconds: 4000),
+      duration: const Duration(milliseconds: 5000),
     );
-
     _blob1Drift =
         Tween<Offset>(
-          begin: const Offset(-0.03, -0.02),
-          end: const Offset(0.03, 0.02),
+          begin: const Offset(-0.04, -0.03),
+          end: const Offset(0.04, 0.03),
         ).animate(
           CurvedAnimation(parent: _blobController, curve: Curves.easeInOutSine),
         );
-
     _blob2Drift =
         Tween<Offset>(
-          begin: const Offset(0.02, 0.03),
-          end: const Offset(-0.02, -0.01),
+          begin: const Offset(0.03, 0.04),
+          end: const Offset(-0.03, -0.02),
         ).animate(
           CurvedAnimation(parent: _blobController, curve: Curves.easeInOutSine),
         );
-
     _blob3Drift =
         Tween<Offset>(
-          begin: const Offset(0.01, -0.03),
-          end: const Offset(-0.03, 0.02),
+          begin: const Offset(0.02, -0.04),
+          end: const Offset(-0.04, 0.03),
         ).animate(
           CurvedAnimation(parent: _blobController, curve: Curves.easeInOutSine),
         );
-
     _blobController.repeat(reverse: true);
 
-    // ── App name ──
+    // ─── Ring ripple ──────────────────────────────────
+    _rippleController = AnimationController(
+      vsync: this,
+      duration: const Duration(milliseconds: 900),
+    );
+    _rippleScale = Tween<double>(begin: 0.0, end: 2.8).animate(
+      CurvedAnimation(parent: _rippleController, curve: Curves.easeOut),
+    );
+    _rippleFade = Tween<double>(
+      begin: 0.55,
+      end: 0.0,
+    ).animate(CurvedAnimation(parent: _rippleController, curve: Curves.easeIn));
+
+    // ─── Letter entrance ──────────────────────────────
     _nameController = AnimationController(
+      vsync: this,
+      duration: const Duration(milliseconds: 1600),
+    );
+
+    // ─── Heartbeat glow ───────────────────────────────
+    _glowController = AnimationController(
       vsync: this,
       duration: const Duration(milliseconds: 1400),
     );
-
-    _nameFade = Tween<double>(begin: 0.0, end: 1.0).animate(
-      CurvedAnimation(
-        parent: _nameController,
-        curve: const Interval(0.0, 0.5, curve: Curves.easeOut),
-      ),
-    );
-
-    _nameSpring = Tween<double>(begin: 0.6, end: 1.0).animate(
-      CurvedAnimation(parent: _nameController, curve: Curves.elasticOut),
-    );
-
-    // ── Glow pulse ──
-    _glowController = AnimationController(
-      vsync: this,
-      duration: const Duration(milliseconds: 1500),
-    );
-
     _glowAnim = TweenSequence<double>([
+      // First beat — quick rise
       TweenSequenceItem(
         tween: Tween(
           begin: 0.0,
-          end: 0.45,
+          end: 0.70,
         ).chain(CurveTween(curve: Curves.easeOut)),
-        weight: 50,
+        weight: 12,
       ),
+      // First beat — quick fall
       TweenSequenceItem(
         tween: Tween(
-          begin: 0.45,
-          end: 0.15,
-        ).chain(CurveTween(curve: Curves.easeInOut)),
-        weight: 50,
+          begin: 0.70,
+          end: 0.25,
+        ).chain(CurveTween(curve: Curves.easeIn)),
+        weight: 8,
       ),
+      // Second beat — softer rise (lub-dub)
+      TweenSequenceItem(
+        tween: Tween(
+          begin: 0.25,
+          end: 0.50,
+        ).chain(CurveTween(curve: Curves.easeOut)),
+        weight: 10,
+      ),
+      // Slow decay back to rest
+      TweenSequenceItem(
+        tween: Tween(
+          begin: 0.50,
+          end: 0.08,
+        ).chain(CurveTween(curve: Curves.easeInOut)),
+        weight: 20,
+      ),
+      // Hold at rest
+      TweenSequenceItem(tween: Tween(begin: 0.08, end: 0.08), weight: 50),
     ]).animate(_glowController);
 
-    // ── Subtitle ──
-    _subtitleController = AnimationController(
+    // ─── Shimmer ──────────────────────────────────────
+    _shimmerController = AnimationController(
       vsync: this,
-      duration: const Duration(milliseconds: 800),
+      duration: const Duration(milliseconds: 750),
+    );
+    _shimmerPos = Tween<double>(begin: -1.0, end: 2.0).animate(
+      CurvedAnimation(parent: _shimmerController, curve: Curves.easeInOut),
     );
 
+    // ─── Subtitle ─────────────────────────────────────
+    _subtitleController = AnimationController(
+      vsync: this,
+      duration: const Duration(milliseconds: 700),
+    );
     _subtitleFade = Tween<double>(begin: 0.0, end: 1.0).animate(
       CurvedAnimation(parent: _subtitleController, curve: Curves.easeOut),
     );
-
     _subtitleSlide =
-        Tween<Offset>(begin: const Offset(0, 0.3), end: Offset.zero).animate(
+        Tween<Offset>(begin: const Offset(0, 0.4), end: Offset.zero).animate(
           CurvedAnimation(
             parent: _subtitleController,
             curve: Curves.easeOutCubic,
           ),
         );
 
-    // ── Exit ──
+    // ─── Particles ────────────────────────────────────
+    _particleController = AnimationController(
+      vsync: this,
+      duration: const Duration(milliseconds: 3000),
+    );
+    _particleController.repeat(reverse: true);
+
+    // ─── Exit ─────────────────────────────────────────
     _exitController = AnimationController(
       vsync: this,
       duration: const Duration(milliseconds: 500),
     );
-
     _exitFade = Tween<double>(begin: 1.0, end: 0.0).animate(
       CurvedAnimation(parent: _exitController, curve: Curves.easeInCubic),
     );
-
-    _exitScale = Tween<double>(begin: 1.0, end: 0.92).animate(
+    _exitScale = Tween<double>(begin: 1.0, end: 0.94).animate(
       CurvedAnimation(parent: _exitController, curve: Curves.easeInCubic),
     );
 
     _startSequence();
   }
 
-  // ════════════════════════════════════════════════
-  // SPLASH SEQUENCE
-  // ════════════════════════════════════════════════
-
   void _startSequence() async {
-    await Future.delayed(const Duration(milliseconds: 300));
+    await Future.delayed(const Duration(milliseconds: 250));
     if (!mounted) return;
 
+    // Ring ripple fires first
+    _rippleController.forward();
+
+    await Future.delayed(const Duration(milliseconds: 180));
+    if (!mounted) return;
+
+    // Logo letters stream in
     _nameController.forward();
 
-    await Future.delayed(const Duration(milliseconds: 400));
+    await Future.delayed(const Duration(milliseconds: 500));
     if (!mounted) return;
-    _glowController.repeat(reverse: true);
+    _glowController.repeat(reverse: false);
 
-    await Future.delayed(const Duration(milliseconds: 200));
+    await Future.delayed(const Duration(milliseconds: 600));
+    if (!mounted) return;
+
+    // Shimmer sweeps across the fully-formed logo
+    _shimmerController.forward();
+
+    await Future.delayed(const Duration(milliseconds: 350));
     if (!mounted) return;
     _subtitleController.forward();
 
-    await Future.delayed(const Duration(milliseconds: 2100));
+    // Hold splash
+    await Future.delayed(const Duration(milliseconds: 1900));
     if (!mounted) return;
 
     _exitController.forward();
     await Future.delayed(const Duration(milliseconds: 500));
     if (!mounted) return;
 
-    // ── Session validation ──
+    // ── Session validation ──────────────────────────────
     Widget destination;
     try {
       final sessionResult = await AuthService.validateSession();
@@ -185,7 +237,6 @@ class _SplashScreenState extends State<SplashScreen>
       if (sessionResult.valid) {
         destination = const MainNavigation();
       } else if (sessionResult.reason == 'blocked') {
-        // Route directly to BlockedAccountScreen — no SnackBar
         destination = BlockedAccountScreen(
           blockedReason: sessionResult.blockedReason,
         );
@@ -194,20 +245,16 @@ class _SplashScreenState extends State<SplashScreen>
           sessionResult.reason == 'no_device') {
         destination = const LoginScreen();
       } else if (sessionResult.reason == 'error') {
-        if (AuthService.isLoggedIn()) {
-          destination = const MainNavigation();
-        } else {
-          destination = const LoginScreen();
-        }
+        destination = AuthService.isLoggedIn()
+            ? const MainNavigation()
+            : const LoginScreen();
       } else {
         destination = const LoginScreen();
       }
     } catch (_) {
-      if (AuthService.isLoggedIn()) {
-        destination = const MainNavigation();
-      } else {
-        destination = const LoginScreen();
-      }
+      destination = AuthService.isLoggedIn()
+          ? const MainNavigation()
+          : const LoginScreen();
     }
 
     if (!mounted) return;
@@ -225,9 +272,12 @@ class _SplashScreenState extends State<SplashScreen>
   @override
   void dispose() {
     _blobController.dispose();
+    _rippleController.dispose();
     _nameController.dispose();
     _glowController.dispose();
+    _shimmerController.dispose();
     _subtitleController.dispose();
+    _particleController.dispose();
     _exitController.dispose();
     super.dispose();
   }
@@ -239,62 +289,65 @@ class _SplashScreenState extends State<SplashScreen>
   @override
   Widget build(BuildContext context) {
     final isDark = Theme.of(context).brightness == Brightness.dark;
-    final bg = isDark ? const Color(0xFF0A0A0A) : const Color(0xFFF8F9FA);
-    final screenSize = MediaQuery.of(context).size;
+    final bg = isDark ? const Color(0xFF080B0F) : const Color(0xFFF4F7FA);
+    final size = MediaQuery.of(context).size;
 
     return Scaffold(
       backgroundColor: bg,
       body: AnimatedBuilder(
         animation: Listenable.merge([_exitController, _blobController]),
-        builder: (context, child) {
+        builder: (context, _) {
           return FadeTransition(
             opacity: _exitFade,
             child: ScaleTransition(
               scale: _exitScale,
               child: Stack(
                 children: [
-                  _buildAnimatedBlob(
-                    screenSize: screenSize,
-                    isDark: isDark,
+                  // ─── Animated blobs ───────────────────
+                  _blob(
+                    size: size,
                     drift: _blob1Drift,
-                    baseLeft: -80,
-                    baseTop: screenSize.height * 0.15,
-                    size: 280,
+                    baseLeft: -90,
+                    baseTop: size.height * 0.12,
+                    blobSize: 320,
                     color: isDark
-                        ? Colors.teal.shade900.withOpacity(0.35)
-                        : Colors.teal.shade200.withOpacity(0.30),
-                    blurSigma: 60,
+                        ? Colors.teal.shade900.withOpacity(0.40)
+                        : Colors.teal.shade200.withOpacity(0.35),
+                    blur: 70,
                   ),
-                  _buildAnimatedBlob(
-                    screenSize: screenSize,
-                    isDark: isDark,
+                  _blob(
+                    size: size,
                     drift: _blob2Drift,
-                    baseLeft: screenSize.width - 100,
-                    baseTop: screenSize.height * 0.55,
-                    size: 220,
+                    baseLeft: size.width - 110,
+                    baseTop: size.height * 0.52,
+                    blobSize: 260,
                     color: isDark
-                        ? Colors.cyan.shade900.withOpacity(0.25)
-                        : Colors.cyan.shade100.withOpacity(0.35),
-                    blurSigma: 50,
+                        ? Colors.cyan.shade900.withOpacity(0.30)
+                        : Colors.cyan.shade100.withOpacity(0.40),
+                    blur: 60,
                   ),
-                  _buildAnimatedBlob(
-                    screenSize: screenSize,
-                    isDark: isDark,
+                  _blob(
+                    size: size,
                     drift: _blob3Drift,
-                    baseLeft: screenSize.width * 0.3,
-                    baseTop: -60,
-                    size: 200,
+                    baseLeft: size.width * 0.25,
+                    baseTop: -70,
+                    blobSize: 240,
                     color: isDark
-                        ? Colors.teal.shade800.withOpacity(0.20)
-                        : Colors.teal.shade100.withOpacity(0.25),
-                    blurSigma: 55,
+                        ? Colors.teal.shade800.withOpacity(0.22)
+                        : Colors.teal.shade100.withOpacity(0.30),
+                    blur: 65,
                   ),
+
+                  // ─── Floating particles ───────────────
+                  ..._buildParticles(size, isDark),
+
+                  // ─── Center content ───────────────────
                   Center(
                     child: Column(
                       mainAxisSize: MainAxisSize.min,
                       children: [
-                        _buildGlowLayer(isDark),
-                        const SizedBox(height: 14),
+                        _buildLogoStack(isDark, size),
+                        const SizedBox(height: 20),
                         SlideTransition(
                           position: _subtitleSlide,
                           child: FadeTransition(
@@ -302,12 +355,12 @@ class _SplashScreenState extends State<SplashScreen>
                             child: Text(
                               'Project by Harish & Diva.',
                               style: TextStyle(
-                                fontSize: 15,
+                                fontSize: 14,
                                 fontWeight: FontWeight.w500,
                                 color: isDark
                                     ? Colors.grey.shade600
                                     : Colors.grey.shade400,
-                                letterSpacing: 0.8,
+                                letterSpacing: 1.2,
                               ),
                             ),
                           ),
@@ -324,96 +377,277 @@ class _SplashScreenState extends State<SplashScreen>
     );
   }
 
-  Widget _buildAnimatedBlob({
-    required Size screenSize,
-    required bool isDark,
-    required Animation<Offset> drift,
-    required double baseLeft,
-    required double baseTop,
-    required double size,
-    required Color color,
-    required double blurSigma,
-  }) {
-    return AnimatedBuilder(
-      animation: drift,
-      builder: (context, child) {
-        final dx = drift.value.dx * screenSize.width;
-        final dy = drift.value.dy * screenSize.height;
+  // ════════════════════════════════════════════════
+  // LOGO STACK: ripple + glow + letters + shimmer
+  // ════════════════════════════════════════════════
 
-        return Positioned(
-          left: baseLeft + dx,
-          top: baseTop + dy,
-          child: Container(
-            width: size,
-            height: size,
-            decoration: BoxDecoration(
-              shape: BoxShape.circle,
-              boxShadow: [
-                BoxShadow(
-                  color: color,
-                  blurRadius: blurSigma,
-                  spreadRadius: size * 0.2,
+  Widget _buildLogoStack(bool isDark, Size screenSize) {
+    return AnimatedBuilder(
+      animation: Listenable.merge([
+        _rippleController,
+        _nameController,
+        _glowController,
+        _shimmerController,
+      ]),
+      builder: (context, _) {
+        return SizedBox(
+          width: 280,
+          height: 120,
+          child: Stack(
+            alignment: Alignment.center,
+            children: [
+              // ── Ripple ring ──────────────────────────
+              if (_rippleController.value > 0 && _rippleController.value < 1)
+                Transform.scale(
+                  scale: _rippleScale.value,
+                  child: Container(
+                    width: 80,
+                    height: 50,
+                    decoration: BoxDecoration(
+                      borderRadius: BorderRadius.circular(30),
+                      border: Border.all(
+                        color:
+                            (isDark
+                                    ? Colors.teal.shade400
+                                    : Colors.teal.shade500)
+                                .withOpacity(_rippleFade.value),
+                        width: 1.5,
+                      ),
+                    ),
+                  ),
                 ),
-              ],
-            ),
+
+              // ── Heartbeat glow ───────────────────────
+              Container(
+                width: 300,
+                height: 110,
+                decoration: BoxDecoration(
+                  borderRadius: BorderRadius.circular(70),
+                  boxShadow: [
+                    BoxShadow(
+                      color:
+                          (isDark ? Colors.teal.shade400 : Colors.teal.shade400)
+                              .withOpacity(_glowAnim.value),
+                      blurRadius: 80,
+                      spreadRadius: 6,
+                    ),
+                  ],
+                ),
+              ),
+
+              // ── Letter-by-letter logo ─────────────────
+              ClipRect(child: _buildShimmerLogo(isDark)),
+            ],
           ),
         );
       },
     );
   }
 
-  Widget _buildGlowLayer(bool isDark) {
-    return AnimatedBuilder(
-      animation: Listenable.merge([_nameController, _glowController]),
-      builder: (context, child) {
-        return Stack(
-          alignment: Alignment.center,
-          children: [
-            if (_glowController.isAnimating || _glowController.value > 0)
-              Container(
-                width: 260,
-                height: 100,
-                decoration: BoxDecoration(
-                  borderRadius: BorderRadius.circular(60),
-                  boxShadow: [
-                    BoxShadow(
-                      color:
-                          (isDark ? Colors.teal.shade400 : Colors.teal.shade300)
-                              .withOpacity(_glowAnim.value),
-                      blurRadius: 60,
-                      spreadRadius: 10,
-                    ),
-                  ],
-                ),
+  // ────────────────────────────────────────────────
+  // Shimmer layer sits on top of the gradient logo
+  // ────────────────────────────────────────────────
+
+  Widget _buildShimmerLogo(bool isDark) {
+    return Stack(
+      alignment: Alignment.center,
+      children: [
+        // Base gradient logo with staggered letters
+        Row(
+          mainAxisSize: MainAxisSize.min,
+          children: List.generate(_appName.length, (i) {
+            // Each letter's interval within the 1600ms controller
+            final start = (i * 0.10).clamp(0.0, 0.9);
+            final end = (start + 0.55).clamp(0.0, 1.0);
+
+            final fade = Tween<double>(begin: 0.0, end: 1.0).animate(
+              CurvedAnimation(
+                parent: _nameController,
+                curve: Interval(start, end, curve: Curves.easeOut),
               ),
-            FadeTransition(
-              opacity: _nameFade,
-              child: Transform.scale(
-                scale: _nameSpring.value,
-                child: ShaderMask(
-                  shaderCallback: (bounds) {
-                    return LinearGradient(
-                      begin: Alignment.topLeft,
-                      end: Alignment.bottomRight,
-                      colors: isDark
-                          ? [Colors.teal.shade300, Colors.cyan.shade300]
-                          : [Colors.teal.shade700, Colors.teal.shade500],
-                    ).createShader(bounds);
-                  },
-                  blendMode: BlendMode.srcIn,
-                  child: Text(
-                    AppConstants.appName,
-                    style: const TextStyle(
-                      fontSize: 56,
-                      fontWeight: FontWeight.w900,
-                      letterSpacing: -2.5,
-                      height: 1.1,
+            );
+            final slide = Tween<double>(begin: 22.0, end: 0.0).animate(
+              CurvedAnimation(
+                parent: _nameController,
+                curve: Interval(start, end, curve: Curves.easeOutCubic),
+              ),
+            );
+            final scale = Tween<double>(begin: 0.55, end: 1.0).animate(
+              CurvedAnimation(
+                parent: _nameController,
+                curve: Interval(start, end, curve: Curves.elasticOut),
+              ),
+            );
+
+            return AnimatedBuilder(
+              animation: _nameController,
+              builder: (_, __) {
+                return Opacity(
+                  opacity: fade.value,
+                  child: Transform.translate(
+                    offset: Offset(0, slide.value),
+                    child: Transform.scale(
+                      scale: scale.value,
+                      child: ShaderMask(
+                        shaderCallback: (bounds) {
+                          return LinearGradient(
+                            begin: Alignment.topLeft,
+                            end: Alignment.bottomRight,
+                            colors: isDark
+                                ? [
+                                    Colors.teal.shade200,
+                                    Colors.cyan.shade300,
+                                    Colors.teal.shade300,
+                                  ]
+                                : [
+                                    Colors.teal.shade600,
+                                    Colors.teal.shade800,
+                                    Colors.teal.shade600,
+                                  ],
+                          ).createShader(bounds);
+                        },
+                        blendMode: BlendMode.srcIn,
+                        child: Text(
+                          _appName[i],
+                          style: const TextStyle(
+                            fontSize: 62,
+                            fontWeight: FontWeight.w900,
+                            letterSpacing: -1.5,
+                            height: 1.0,
+                          ),
+                        ),
+                      ),
                     ),
                   ),
-                ),
+                );
+              },
+            );
+          }),
+        ),
+
+        // Shimmer sweep overlay
+        if (_shimmerController.value > 0)
+          Positioned.fill(
+            child: IgnorePointer(
+              child: AnimatedBuilder(
+                animation: _shimmerController,
+                builder: (_, __) {
+                  return ShaderMask(
+                    shaderCallback: (bounds) {
+                      final center = _shimmerPos.value;
+                      return LinearGradient(
+                        begin: Alignment.centerLeft,
+                        end: Alignment.centerRight,
+                        colors: [
+                          Colors.transparent,
+                          Colors.white.withOpacity(isDark ? 0.55 : 0.70),
+                          Colors.transparent,
+                        ],
+                        stops: [
+                          (center - 0.25).clamp(0.0, 1.0),
+                          center.clamp(0.0, 1.0),
+                          (center + 0.25).clamp(0.0, 1.0),
+                        ],
+                      ).createShader(bounds);
+                    },
+                    blendMode: BlendMode.srcATop,
+                    child: Container(color: Colors.white),
+                  );
+                },
               ),
             ),
-          ],
+          ),
+      ],
+    );
+  }
+
+  // ════════════════════════════════════════════════
+  // FLOATING PARTICLES
+  // ════════════════════════════════════════════════
+
+  static const _particleData = [
+    // [baseX%, baseY%, size, phase, speed]
+    [0.15, 0.25, 5.0, 0.0, 0.06],
+    [0.82, 0.18, 4.0, 0.5, 0.05],
+    [0.72, 0.72, 6.0, 0.3, 0.07],
+    [0.22, 0.78, 3.5, 0.8, 0.04],
+    [0.50, 0.88, 4.5, 0.2, 0.05],
+    [0.88, 0.50, 3.0, 0.7, 0.06],
+  ];
+
+  List<Widget> _buildParticles(Size size, bool isDark) {
+    return _particleData.map((p) {
+      return AnimatedBuilder(
+        animation: _particleController,
+        builder: (_, __) {
+          final t = (_particleController.value + p[3]) % 1.0;
+          final dy = math.sin(t * math.pi * 2) * 18 * p[4] * 10;
+          final dx = math.cos(t * math.pi * 2) * 8 * p[4] * 10;
+          final opacity = (0.25 + 0.20 * math.sin(t * math.pi * 2)).clamp(
+            0.0,
+            1.0,
+          );
+
+          return Positioned(
+            left: size.width * p[0] + dx,
+            top: size.height * p[1] + dy,
+            child: Container(
+              width: p[2],
+              height: p[2],
+              decoration: BoxDecoration(
+                shape: BoxShape.circle,
+                color: (isDark ? Colors.teal.shade400 : Colors.teal.shade500)
+                    .withOpacity(opacity),
+                boxShadow: [
+                  BoxShadow(
+                    color:
+                        (isDark ? Colors.teal.shade400 : Colors.teal.shade400)
+                            .withOpacity(opacity * 0.6),
+                    blurRadius: p[2] * 2.5,
+                    spreadRadius: 0.5,
+                  ),
+                ],
+              ),
+            ),
+          );
+        },
+      );
+    }).toList();
+  }
+
+  // ════════════════════════════════════════════════
+  // BLOB WIDGET
+  // ════════════════════════════════════════════════
+
+  Widget _blob({
+    required Size size,
+    required Animation<Offset> drift,
+    required double baseLeft,
+    required double baseTop,
+    required double blobSize,
+    required Color color,
+    required double blur,
+  }) {
+    return AnimatedBuilder(
+      animation: drift,
+      builder: (_, __) {
+        return Positioned(
+          left: baseLeft + drift.value.dx * size.width,
+          top: baseTop + drift.value.dy * size.height,
+          child: Container(
+            width: blobSize,
+            height: blobSize,
+            decoration: BoxDecoration(
+              shape: BoxShape.circle,
+              boxShadow: [
+                BoxShadow(
+                  color: color,
+                  blurRadius: blur,
+                  spreadRadius: blobSize * 0.22,
+                ),
+              ],
+            ),
+          ),
         );
       },
     );
