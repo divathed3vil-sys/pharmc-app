@@ -67,6 +67,11 @@ class _LoginScreenState extends State<LoginScreen>
   void initState() {
     super.initState();
 
+    // ✅ This forces rebuild when phone input changes
+    _phoneController.addListener(() {
+      setState(() {});
+    });
+
     _anim = AnimationController(
       vsync: this,
       duration: const Duration(milliseconds: 600),
@@ -97,6 +102,7 @@ class _LoginScreenState extends State<LoginScreen>
     final result = await AuthService.signIn(phone: _rawPhone);
 
     if (!mounted) return;
+
     setState(() => _isLoading = false);
 
     if (result.success) {
@@ -138,7 +144,6 @@ class _LoginScreenState extends State<LoginScreen>
       appBar: AppBar(backgroundColor: Colors.transparent, elevation: 0),
       body: Stack(
         children: [
-          // 🔹 Full Screen Blobs
           Positioned(
             top: -120,
             right: -100,
@@ -306,7 +311,7 @@ class _LoginScreenState extends State<LoginScreen>
       style: TextStyle(color: text, fontWeight: FontWeight.w600),
       decoration: InputDecoration(
         prefixText: "+94 ",
-        hintText: "77 123 4567",
+        hintText: "7* *** ****",
         border: OutlineInputBorder(borderRadius: BorderRadius.circular(16)),
       ),
     );

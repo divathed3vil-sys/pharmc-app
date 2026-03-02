@@ -1,6 +1,7 @@
 import 'dart:ui';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:flutter/cupertino.dart';
 
 import '../../constants.dart';
 import '../../services/auth_service.dart';
@@ -67,17 +68,31 @@ class _CreateAccountScreenState extends State<CreateAccountScreen>
     return age;
   }
 
-  bool get _canSubmit =>
-      _nameController.text.trim().length >= 2 &&
-      _rawPhone.length == 9 &&
-      _dob != null &&
-      _age != null &&
-      _age! >= 18 &&
-      !_isLoading;
+  bool get _canSubmit {
+    if (_isLoading) return false;
+    if (_nameController.text.trim().length < 2) return false;
+    if (_rawPhone.length != 9) return false;
+    if (_rawPhone.split('').every((c) => c == _rawPhone[0])) return false;
+    if (_dob == null) return false;
+
+    final age = _age;
+    if (age == null || age < 18) return false;
+
+    return true;
+  }
 
   @override
   void initState() {
     super.initState();
+
+    // Force rebuild when text changes
+    _nameController.addListener(() {
+      setState(() {});
+    });
+
+    _phoneController.addListener(() {
+      setState(() {});
+    });
 
     _anim = AnimationController(
       vsync: this,
@@ -101,18 +116,107 @@ class _CreateAccountScreenState extends State<CreateAccountScreen>
     super.dispose();
   }
 
-  Future<void> _pickDOB() async {
+  Future<void> _showDOBPicker() async {
     final now = DateTime.now();
-    final picked = await showDatePicker(
-      context: context,
-      initialDate: DateTime(now.year - 20),
-      firstDate: DateTime(1920),
-      lastDate: now,
-    );
 
-    if (picked != null) {
-      setState(() => _dob = picked);
-    }
+    int selectedYear = now.year - 20;
+    int selectedMonth = 1;
+    int selectedDay = 1;
+
+    await showModalBottomSheet(
+      context: context,
+      backgroundColor: Theme.of(context).brightness == Brightness.dark
+          ? const Color(0xFF1A1A1A)
+          : Colors.white,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
+      ),
+      builder: (_) {
+        return SizedBox(
+          height: 320,
+          child: Column(
+            children: [
+              const SizedBox(height: 16),
+              Container(
+                width: 40,
+                height: 4,
+                decoration: BoxDecoration(
+                  color: Colors.grey.withOpacity(0.4),
+                  borderRadius: BorderRadius.circular(10),
+                ),
+              ),
+              const SizedBox(height: 20),
+              Expanded(
+                child: Row(
+                  children: [
+                    Expanded(
+                      child: CupertinoPicker(
+                        itemExtent: 40,
+                        onSelectedItemChanged: (index) {
+                          selectedDay = index + 1;
+                        },
+                        children: List.generate(
+                          31,
+                          (i) => Center(child: Text('${i + 1}')),
+                        ),
+                      ),
+                    ),
+
+                    Expanded(
+                      child: CupertinoPicker(
+                        itemExtent: 40,
+                        onSelectedItemChanged: (index) {
+                          selectedMonth = index + 1;
+                        },
+                        children: List.generate(
+                          12,
+                          (i) => Center(child: Text('${i + 1}')),
+                        ),
+                      ),
+                    ),
+
+                    Expanded(
+                      child: CupertinoPicker(
+                        itemExtent: 40,
+                        onSelectedItemChanged: (index) {
+                          selectedYear = now.year - index;
+                        },
+                        children: List.generate(
+                          100,
+                          (i) => Center(child: Text('${now.year - i}')),
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              Padding(
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 24,
+                  vertical: 16,
+                ),
+                child: ElevatedButton(
+                  onPressed: () {
+                    final safeDate = DateTime(
+                      selectedYear,
+                      selectedMonth,
+                      selectedDay,
+                    );
+
+                    setState(() {
+                      _dob = safeDate;
+                    });
+
+                    Navigator.pop(context);
+                  },
+                  child: const Text("Confirm"),
+                ),
+              ),
+            ],
+          ),
+        );
+      },
+    );
   }
 
   Future<void> _register() async {
@@ -129,6 +233,7 @@ class _CreateAccountScreenState extends State<CreateAccountScreen>
     );
 
     if (!mounted) return;
+
     setState(() => _isLoading = false);
 
     if (result.success) {
@@ -153,7 +258,6 @@ class _CreateAccountScreenState extends State<CreateAccountScreen>
   @override
   Widget build(BuildContext context) {
     final isDark = Theme.of(context).brightness == Brightness.dark;
-
     final bg = isDark ? const Color(0xFF0E0E0E) : const Color(0xFFF6F8FA);
     final text = isDark ? Colors.white : const Color(0xFF1A1A1A);
 
@@ -163,7 +267,6 @@ class _CreateAccountScreenState extends State<CreateAccountScreen>
       appBar: AppBar(backgroundColor: Colors.transparent, elevation: 0),
       body: Stack(
         children: [
-          // 🔹 Background blobs
           Positioned(
             top: -120,
             right: -100,
@@ -222,7 +325,7 @@ class _CreateAccountScreenState extends State<CreateAccountScreen>
                               const SizedBox(height: 16),
 
                               GestureDetector(
-                                onTap: _pickDOB,
+                                onTap: _showDOBPicker,
                                 child: Container(
                                   height: 56,
                                   alignment: Alignment.centerLeft,
@@ -371,7 +474,7 @@ class _CreateAccountScreenState extends State<CreateAccountScreen>
       inputFormatters: [_PhoneSpaceFormatter()],
       decoration: InputDecoration(
         prefixText: "+94 ",
-        hintText: "77 123 4567",
+        hintText: "77 *** ****",
         border: OutlineInputBorder(borderRadius: BorderRadius.circular(16)),
       ),
     );
