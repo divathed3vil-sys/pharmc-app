@@ -8,7 +8,7 @@ import 'package:hive_flutter/hive_flutter.dart';
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
 
-  // Initialize Supabase
+  // Initialize Supabase — used for DATABASE ONLY (no auth)
   await Supabase.initialize(
     url: 'https://tjzutbitodyhrvfktxhm.supabase.co',
     anonKey:
@@ -23,7 +23,7 @@ void main() async {
   runApp(const MyApp());
 }
 
-// Global Supabase client - use this anywhere in the app
+// Global Supabase client — used for DATABASE QUERIES ONLY (no auth)
 final supabase = Supabase.instance.client;
 
 class MyApp extends StatefulWidget {

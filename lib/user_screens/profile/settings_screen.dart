@@ -1,5 +1,6 @@
 import 'dart:ui';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 
 import '../../main.dart';
 import '../../services/preferences_service.dart';
@@ -20,6 +21,10 @@ class _SettingsScreenState extends State<SettingsScreen>
   bool _notifications = true;
   String _language = 'en';
 
+  // Share account state
+  String? _shareCode;
+  bool _shareLoading = false;
+
   late final AnimationController _fadeController;
   late final Animation<double> _fadeAnim;
 
@@ -37,6 +42,9 @@ class _SettingsScreenState extends State<SettingsScreen>
     );
     _fadeAnim = CurvedAnimation(parent: _fadeController, curve: Curves.easeOut);
     _fadeController.forward();
+
+    // Load existing share code on init
+    _loadShareCode();
   }
 
   @override
@@ -49,14 +57,94 @@ class _SettingsScreenState extends State<SettingsScreen>
     MyApp.refresh(context);
   }
 
+  // ============ SHARE CODE METHODS ============
+
+  Future<void> _loadShareCode() async {
+    final code = await AuthService.getShareCode();
+    if (!mounted) return;
+    setState(() => _shareCode = code);
+  }
+
+  Future<void> _generateShareCode() async {
+    setState(() => _shareLoading = true);
+
+    final result = await AuthService.generateShareCode();
+
+    if (!mounted) return;
+    setState(() => _shareLoading = false);
+
+    if (result.success && result.shareCode != null) {
+      setState(() => _shareCode = result.shareCode);
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: const Text('Share code generated!'),
+          backgroundColor: Colors.teal.shade600,
+          behavior: SnackBarBehavior.floating,
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(12),
+          ),
+        ),
+      );
+    } else {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(result.message),
+          backgroundColor: Colors.red.shade400,
+          behavior: SnackBarBehavior.floating,
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(12),
+          ),
+        ),
+      );
+    }
+  }
+
+  Future<void> _revokeShareCode() async {
+    setState(() => _shareLoading = true);
+
+    final result = await AuthService.clearShareCode();
+
+    if (!mounted) return;
+    setState(() => _shareLoading = false);
+
+    if (result.success) {
+      setState(() => _shareCode = null);
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: const Text('Share code revoked.'),
+          backgroundColor: Colors.teal.shade600,
+          behavior: SnackBarBehavior.floating,
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(12),
+          ),
+        ),
+      );
+    }
+  }
+
+  void _copyShareCode() {
+    if (_shareCode == null || _shareCode!.isEmpty) return;
+    Clipboard.setData(ClipboardData(text: _shareCode!));
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: const Text('Share code copied to clipboard!'),
+        backgroundColor: Colors.teal.shade600,
+        behavior: SnackBarBehavior.floating,
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+      ),
+    );
+  }
+
+  // ============ NAVIGATION ============
+
   void _goToLogin() {
     if (!mounted) return;
     Navigator.pushAndRemoveUntil(
       context,
       PageRouteBuilder(
-        pageBuilder: (_, _, _) => const LoginScreen(),
+        pageBuilder: (_, __, ___) => const LoginScreen(),
         transitionDuration: const Duration(milliseconds: 400),
-        transitionsBuilder: (_, animation, _, child) =>
+        transitionsBuilder: (_, animation, __, child) =>
             FadeTransition(opacity: animation, child: child),
       ),
       (route) => false,
@@ -77,7 +165,7 @@ class _SettingsScreenState extends State<SettingsScreen>
       barrierLabel: 'Logout',
       barrierColor: Colors.black.withOpacity(isDark ? 0.6 : 0.4),
       transitionDuration: const Duration(milliseconds: 250),
-      pageBuilder: (_, _, _) => Center(
+      pageBuilder: (_, __, ___) => Center(
         child: Material(
           color: Colors.transparent,
           child: _glassDialog(
@@ -152,7 +240,7 @@ class _SettingsScreenState extends State<SettingsScreen>
           ),
         ),
       ),
-      transitionBuilder: (_, anim, _, child) => FadeTransition(
+      transitionBuilder: (_, anim, __, child) => FadeTransition(
         opacity: CurvedAnimation(parent: anim, curve: Curves.easeOut),
         child: child,
       ),
@@ -163,327 +251,114 @@ class _SettingsScreenState extends State<SettingsScreen>
     }
   }
 
-  Future<void> _showDeleteFlow() async {
+  Future<void> _showDeleteConfirm() async {
     final isDark = Theme.of(context).brightness == Brightness.dark;
-    final controller = PageController();
-    final passController = TextEditingController();
-    bool deleting = false;
-    String? error;
 
-    Future<void> doDelete(StateSetter setLocal) async {
-      setLocal(() {
-        deleting = true;
-        error = null;
-      });
-
-      // Re-auth friction: verify password by signInWithPassword
-      final email = PreferencesService.getUserEmail() ?? '';
-      final password = passController.text;
-
-      if (email.isEmpty || password.isEmpty) {
-        setLocal(() {
-          deleting = false;
-          error = 'Enter your password to continue.';
-        });
-        return;
-      }
-
-      try {
-        // re-login to confirm password
-        final signIn = await AuthService.signIn(
-          email: email,
-          password: password,
-        );
-        if (!signIn.success) {
-          setLocal(() {
-            deleting = false;
-            error = 'Incorrect password.';
-          });
-          return;
-        }
-
-        // now delete (currently not fully implemented in AuthService)
-        final res = await AuthService.deleteAccount();
-        if (!res.success) {
-          setLocal(() {
-            deleting = false;
-            error = res.message;
-          });
-          return;
-        }
-
-        if (!mounted) return;
-        Navigator.pop(context); // close dialog
-        _goToLogin();
-      } catch (_) {
-        setLocal(() {
-          deleting = false;
-          error = 'Failed to delete. Try again.';
-        });
-      }
-    }
-
-    await showGeneralDialog(
+    final ok = await showGeneralDialog<bool>(
       context: context,
       barrierDismissible: true,
       barrierLabel: 'Delete account',
       barrierColor: Colors.black.withOpacity(isDark ? 0.65 : 0.45),
       transitionDuration: const Duration(milliseconds: 250),
-      pageBuilder: (_, _, _) {
-        return Center(
-          child: Material(
-            color: Colors.transparent,
-            child: StatefulBuilder(
-              builder: (context, setLocal) {
-                return _glassDialog(
-                  isDark: isDark,
-                  child: SizedBox(
-                    height: 340,
-                    child: PageView(
-                      controller: controller,
-                      physics: const NeverScrollableScrollPhysics(),
-                      children: [
-                        // Page 1 warning
-                        Column(
-                          mainAxisAlignment: MainAxisAlignment.center,
-                          children: [
-                            Icon(
-                              Icons.delete_forever_rounded,
-                              color: Colors.red.shade400,
-                              size: 44,
-                            ),
-                            const SizedBox(height: 12),
-                            Text(
-                              'Delete account?',
-                              style: TextStyle(
-                                color: isDark
-                                    ? Colors.white
-                                    : const Color(0xFF1A1A1A),
-                                fontWeight: FontWeight.w900,
-                                fontSize: 18,
-                              ),
-                            ),
-                            const SizedBox(height: 10),
-                            Text(
-                              'This action cannot be undone.\nAll your data will be permanently removed.',
-                              textAlign: TextAlign.center,
-                              style: TextStyle(
-                                color: Colors.grey.shade500,
-                                height: 1.4,
-                              ),
-                            ),
-                            const SizedBox(height: 18),
-                            Row(
-                              children: [
-                                Expanded(
-                                  child: SizedBox(
-                                    height: 46,
-                                    child: OutlinedButton(
-                                      onPressed: () => Navigator.pop(context),
-                                      style: OutlinedButton.styleFrom(
-                                        shape: RoundedRectangleBorder(
-                                          borderRadius: BorderRadius.circular(
-                                            16,
-                                          ),
-                                        ),
-                                      ),
-                                      child: const Text(
-                                        'Cancel',
-                                        style: TextStyle(
-                                          fontWeight: FontWeight.w900,
-                                        ),
-                                      ),
-                                    ),
-                                  ),
-                                ),
-                                const SizedBox(width: 10),
-                                Expanded(
-                                  child: SizedBox(
-                                    height: 46,
-                                    child: ElevatedButton(
-                                      onPressed: () {
-                                        controller.nextPage(
-                                          duration: const Duration(
-                                            milliseconds: 260,
-                                          ),
-                                          curve: Curves.easeOutCubic,
-                                        );
-                                      },
-                                      style: ElevatedButton.styleFrom(
-                                        backgroundColor: Colors.red.shade500,
-                                        elevation: 0,
-                                        shape: RoundedRectangleBorder(
-                                          borderRadius: BorderRadius.circular(
-                                            16,
-                                          ),
-                                        ),
-                                      ),
-                                      child: const Text(
-                                        'Next',
-                                        style: TextStyle(
-                                          fontWeight: FontWeight.w900,
-                                        ),
-                                      ),
-                                    ),
-                                  ),
-                                ),
-                              ],
-                            ),
-                          ],
-                        ),
-
-                        // Page 2 password confirm
-                        Column(
-                          mainAxisAlignment: MainAxisAlignment.center,
-                          children: [
-                            Icon(
-                              Icons.lock_rounded,
-                              color: Colors.orange.shade400,
-                              size: 42,
-                            ),
-                            const SizedBox(height: 12),
-                            Text(
-                              'Confirm with password',
-                              style: TextStyle(
-                                color: isDark
-                                    ? Colors.white
-                                    : const Color(0xFF1A1A1A),
-                                fontWeight: FontWeight.w900,
-                                fontSize: 18,
-                              ),
-                            ),
-                            const SizedBox(height: 10),
-                            Text(
-                              'Enter your password to permanently delete your account.',
-                              textAlign: TextAlign.center,
-                              style: TextStyle(
-                                color: Colors.grey.shade500,
-                                height: 1.4,
-                              ),
-                            ),
-                            const SizedBox(height: 14),
-
-                            Container(
-                              decoration: BoxDecoration(
-                                color: isDark
-                                    ? Colors.white.withOpacity(0.06)
-                                    : Colors.black.withOpacity(0.03),
-                                borderRadius: BorderRadius.circular(16),
-                                border: Border.all(
-                                  color: isDark
-                                      ? Colors.white.withOpacity(0.10)
-                                      : Colors.black.withOpacity(0.06),
-                                ),
-                              ),
-                              child: TextField(
-                                controller: passController,
-                                obscureText: true,
-                                decoration: const InputDecoration(
-                                  border: InputBorder.none,
-                                  prefixIcon: Icon(Icons.key_rounded),
-                                  hintText: 'Password',
-                                  contentPadding: EdgeInsets.all(16),
-                                ),
-                              ),
-                            ),
-
-                            if (error != null) ...[
-                              const SizedBox(height: 10),
-                              Text(
-                                error!,
-                                style: TextStyle(
-                                  color: Colors.red.shade400,
-                                  fontWeight: FontWeight.w800,
-                                ),
-                              ),
-                            ],
-
-                            const SizedBox(height: 16),
-                            Row(
-                              children: [
-                                Expanded(
-                                  child: SizedBox(
-                                    height: 46,
-                                    child: OutlinedButton(
-                                      onPressed: deleting
-                                          ? null
-                                          : () {
-                                              controller.previousPage(
-                                                duration: const Duration(
-                                                  milliseconds: 240,
-                                                ),
-                                                curve: Curves.easeOutCubic,
-                                              );
-                                            },
-                                      style: OutlinedButton.styleFrom(
-                                        shape: RoundedRectangleBorder(
-                                          borderRadius: BorderRadius.circular(
-                                            16,
-                                          ),
-                                        ),
-                                      ),
-                                      child: const Text(
-                                        'Back',
-                                        style: TextStyle(
-                                          fontWeight: FontWeight.w900,
-                                        ),
-                                      ),
-                                    ),
-                                  ),
-                                ),
-                                const SizedBox(width: 10),
-                                Expanded(
-                                  child: SizedBox(
-                                    height: 46,
-                                    child: ElevatedButton(
-                                      onPressed: deleting
-                                          ? null
-                                          : () => doDelete(setLocal),
-                                      style: ElevatedButton.styleFrom(
-                                        backgroundColor: Colors.red.shade500,
-                                        elevation: 0,
-                                        shape: RoundedRectangleBorder(
-                                          borderRadius: BorderRadius.circular(
-                                            16,
-                                          ),
-                                        ),
-                                      ),
-                                      child: deleting
-                                          ? const SizedBox(
-                                              width: 20,
-                                              height: 20,
-                                              child: CircularProgressIndicator(
-                                                strokeWidth: 2.2,
-                                                color: Colors.white,
-                                              ),
-                                            )
-                                          : const Text(
-                                              'Delete',
-                                              style: TextStyle(
-                                                fontWeight: FontWeight.w900,
-                                              ),
-                                            ),
-                                    ),
-                                  ),
-                                ),
-                              ],
-                            ),
-                          ],
-                        ),
-                      ],
-                    ),
+      pageBuilder: (_, __, ___) => Center(
+        child: Material(
+          color: Colors.transparent,
+          child: _glassDialog(
+            isDark: isDark,
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Icon(
+                  Icons.delete_forever_rounded,
+                  color: Colors.red.shade400,
+                  size: 44,
+                ),
+                const SizedBox(height: 12),
+                Text(
+                  'Delete account?',
+                  style: TextStyle(
+                    color: isDark ? Colors.white : const Color(0xFF1A1A1A),
+                    fontWeight: FontWeight.w900,
+                    fontSize: 18,
                   ),
-                );
-              },
+                ),
+                const SizedBox(height: 10),
+                Text(
+                  'This action cannot be undone.\nAll your data, devices, and orders will be permanently removed.',
+                  textAlign: TextAlign.center,
+                  style: TextStyle(color: Colors.grey.shade500, height: 1.4),
+                ),
+                const SizedBox(height: 18),
+                Row(
+                  children: [
+                    Expanded(
+                      child: SizedBox(
+                        height: 46,
+                        child: OutlinedButton(
+                          onPressed: () => Navigator.pop(context, false),
+                          style: OutlinedButton.styleFrom(
+                            shape: RoundedRectangleBorder(
+                              borderRadius: BorderRadius.circular(16),
+                            ),
+                          ),
+                          child: const Text(
+                            'Cancel',
+                            style: TextStyle(fontWeight: FontWeight.w900),
+                          ),
+                        ),
+                      ),
+                    ),
+                    const SizedBox(width: 10),
+                    Expanded(
+                      child: SizedBox(
+                        height: 46,
+                        child: ElevatedButton(
+                          onPressed: () => Navigator.pop(context, true),
+                          style: ElevatedButton.styleFrom(
+                            backgroundColor: Colors.red.shade500,
+                            elevation: 0,
+                            shape: RoundedRectangleBorder(
+                              borderRadius: BorderRadius.circular(16),
+                            ),
+                          ),
+                          child: const Text(
+                            'Delete forever',
+                            style: TextStyle(fontWeight: FontWeight.w900),
+                          ),
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+              ],
             ),
           ),
-        );
-      },
-      transitionBuilder: (_, anim, _, child) => FadeTransition(
+        ),
+      ),
+      transitionBuilder: (_, anim, __, child) => FadeTransition(
         opacity: CurvedAnimation(parent: anim, curve: Curves.easeOut),
         child: child,
       ),
     );
+
+    if (ok == true) {
+      final result = await AuthService.deleteAccount();
+      if (result.success) {
+        _goToLogin();
+      } else {
+        if (!mounted) return;
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(result.message),
+            backgroundColor: Colors.red.shade400,
+            behavior: SnackBarBehavior.floating,
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(12),
+            ),
+          ),
+        );
+      }
+    }
   }
 
   @override
@@ -610,6 +485,11 @@ class _SettingsScreenState extends State<SettingsScreen>
                 ),
 
                 const SizedBox(height: 18),
+                _sectionTitle('Share Account', sub),
+                const SizedBox(height: 10),
+                _shareAccountCard(isDark, text, sub),
+
+                const SizedBox(height: 18),
                 _sectionTitle('Storage', sub),
                 const SizedBox(height: 10),
                 _menuTile(
@@ -647,9 +527,9 @@ class _SettingsScreenState extends State<SettingsScreen>
                   isDark: isDark,
                   icon: Icons.delete_forever_rounded,
                   title: 'Delete account',
-                  subtitle: 'Permanent removal (requires password)',
+                  subtitle: 'Permanent removal of all data',
                   color: Colors.red,
-                  onTap: _showDeleteFlow,
+                  onTap: _showDeleteConfirm,
                 ),
               ],
             ),
@@ -658,6 +538,272 @@ class _SettingsScreenState extends State<SettingsScreen>
       ),
     );
   }
+
+  // ============ SHARE ACCOUNT CARD ============
+
+  Widget _shareAccountCard(bool isDark, Color text, Color sub) {
+    return _glassCard(
+      isDark: isDark,
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              _iconBox(isDark, Icons.share_rounded, Colors.teal),
+              const SizedBox(width: 12),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      'Share Account',
+                      style: TextStyle(
+                        color: text,
+                        fontWeight: FontWeight.w900,
+                      ),
+                    ),
+                    const SizedBox(height: 2),
+                    Text(
+                      'Let another device join your account',
+                      style: TextStyle(color: sub, fontSize: 12),
+                    ),
+                  ],
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 14),
+
+          // Info text
+          Container(
+            width: double.infinity,
+            padding: const EdgeInsets.all(12),
+            decoration: BoxDecoration(
+              color: Colors.teal.withOpacity(isDark ? 0.10 : 0.06),
+              borderRadius: BorderRadius.circular(14),
+              border: Border.all(color: Colors.teal.withOpacity(0.18)),
+            ),
+            child: Row(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Icon(
+                  Icons.info_outline_rounded,
+                  color: Colors.teal.shade400,
+                  size: 16,
+                ),
+                const SizedBox(width: 8),
+                Expanded(
+                  child: Text(
+                    'Generate a 6-digit code and share it with another device. '
+                    'Maximum 4 devices per account. Code is one-time use.',
+                    style: TextStyle(
+                      color: isDark
+                          ? Colors.teal.shade200
+                          : Colors.teal.shade800,
+                      fontSize: 11,
+                      height: 1.5,
+                      fontWeight: FontWeight.w600,
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ),
+
+          const SizedBox(height: 14),
+
+          // Share code display or generate button
+          if (_shareCode != null && _shareCode!.isNotEmpty) ...[
+            // Code display card
+            Container(
+              width: double.infinity,
+              padding: const EdgeInsets.all(16),
+              decoration: BoxDecoration(
+                color: isDark
+                    ? Colors.white.withOpacity(0.06)
+                    : Colors.black.withOpacity(0.03),
+                borderRadius: BorderRadius.circular(18),
+                border: Border.all(
+                  color: Colors.teal.shade400.withOpacity(0.3),
+                  width: 1.5,
+                ),
+              ),
+              child: Column(
+                children: [
+                  Text(
+                    'Your share code',
+                    style: TextStyle(
+                      color: sub,
+                      fontSize: 11,
+                      fontWeight: FontWeight.w700,
+                    ),
+                  ),
+                  const SizedBox(height: 8),
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: _shareCode!.split('').map((digit) {
+                      return Container(
+                        width: 40,
+                        height: 48,
+                        margin: const EdgeInsets.symmetric(horizontal: 3),
+                        decoration: BoxDecoration(
+                          color: Colors.teal.withOpacity(isDark ? 0.15 : 0.08),
+                          borderRadius: BorderRadius.circular(12),
+                          border: Border.all(
+                            color: Colors.teal.shade400.withOpacity(0.3),
+                          ),
+                        ),
+                        child: Center(
+                          child: Text(
+                            digit,
+                            style: TextStyle(
+                              color: Colors.teal.shade400,
+                              fontSize: 22,
+                              fontWeight: FontWeight.w900,
+                              fontFamily: 'monospace',
+                            ),
+                          ),
+                        ),
+                      );
+                    }).toList(),
+                  ),
+                  const SizedBox(height: 14),
+                  Row(
+                    children: [
+                      Expanded(
+                        child: SizedBox(
+                          height: 42,
+                          child: OutlinedButton.icon(
+                            onPressed: _shareLoading ? null : _copyShareCode,
+                            icon: const Icon(Icons.copy_rounded, size: 16),
+                            label: const Text(
+                              'Copy',
+                              style: TextStyle(fontWeight: FontWeight.w900),
+                            ),
+                            style: OutlinedButton.styleFrom(
+                              foregroundColor: Colors.teal.shade400,
+                              side: BorderSide(
+                                color: Colors.teal.shade400.withOpacity(0.4),
+                              ),
+                              shape: RoundedRectangleBorder(
+                                borderRadius: BorderRadius.circular(14),
+                              ),
+                            ),
+                          ),
+                        ),
+                      ),
+                      const SizedBox(width: 10),
+                      Expanded(
+                        child: SizedBox(
+                          height: 42,
+                          child: OutlinedButton.icon(
+                            onPressed: _shareLoading ? null : _revokeShareCode,
+                            icon: Icon(
+                              Icons.close_rounded,
+                              size: 16,
+                              color: Colors.red.shade400,
+                            ),
+                            label: Text(
+                              'Revoke',
+                              style: TextStyle(
+                                fontWeight: FontWeight.w900,
+                                color: Colors.red.shade400,
+                              ),
+                            ),
+                            style: OutlinedButton.styleFrom(
+                              side: BorderSide(
+                                color: Colors.red.shade400.withOpacity(0.4),
+                              ),
+                              shape: RoundedRectangleBorder(
+                                borderRadius: BorderRadius.circular(14),
+                              ),
+                            ),
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                ],
+              ),
+            ),
+
+            const SizedBox(height: 10),
+
+            // Regenerate
+            SizedBox(
+              width: double.infinity,
+              height: 46,
+              child: OutlinedButton.icon(
+                onPressed: _shareLoading ? null : _generateShareCode,
+                icon: _shareLoading
+                    ? SizedBox(
+                        width: 16,
+                        height: 16,
+                        child: CircularProgressIndicator(
+                          strokeWidth: 2,
+                          color: Colors.teal.shade400,
+                        ),
+                      )
+                    : Icon(
+                        Icons.refresh_rounded,
+                        size: 18,
+                        color: Colors.teal.shade400,
+                      ),
+                label: Text(
+                  'Generate new code',
+                  style: TextStyle(
+                    fontWeight: FontWeight.w900,
+                    color: Colors.teal.shade400,
+                  ),
+                ),
+                style: OutlinedButton.styleFrom(
+                  side: BorderSide(
+                    color: Colors.teal.shade400.withOpacity(0.3),
+                  ),
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(16),
+                  ),
+                ),
+              ),
+            ),
+          ] else ...[
+            // No code yet — show generate button
+            SizedBox(
+              width: double.infinity,
+              height: 52,
+              child: ElevatedButton.icon(
+                onPressed: _shareLoading ? null : _generateShareCode,
+                icon: _shareLoading
+                    ? const SizedBox(
+                        width: 20,
+                        height: 20,
+                        child: CircularProgressIndicator(
+                          strokeWidth: 2.2,
+                          color: Colors.white,
+                        ),
+                      )
+                    : const Icon(Icons.qr_code_rounded, size: 20),
+                label: const Text(
+                  'Generate share code',
+                  style: TextStyle(fontWeight: FontWeight.w900, fontSize: 15),
+                ),
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: Colors.teal.shade600,
+                  foregroundColor: Colors.white,
+                  elevation: 0,
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(18),
+                  ),
+                ),
+              ),
+            ),
+          ],
+        ],
+      ),
+    );
+  }
+
+  // ============ EXISTING WIDGETS (unchanged) ============
 
   Widget _sectionTitle(String t, Color sub) {
     return Padding(
@@ -801,7 +947,6 @@ class _SettingsScreenState extends State<SettingsScreen>
   }
 
   Widget _segmentedLanguage(bool isDark, Color text, Color sub) {
-    // Sinhala/Tamil greyed out
     return Row(
       children: [
         _segOption(

@@ -22,7 +22,7 @@ class _ProfileScreenState extends State<ProfileScreen>
     with TickerProviderStateMixin {
   String _name = '';
   String _phone = '';
-  String _email = '';
+  String _dob = '';
   int _age = 0;
 
   String _verificationStatus = 'unverified';
@@ -55,7 +55,7 @@ class _ProfileScreenState extends State<ProfileScreen>
     setState(() {
       _name = PreferencesService.getUserName() ?? 'User';
       _phone = PreferencesService.getUserPhone() ?? '';
-      _email = PreferencesService.getUserEmail() ?? '';
+      _dob = PreferencesService.getDateOfBirth() ?? '';
       _age = PreferencesService.getUserAge() ?? 0;
     });
   }
@@ -94,7 +94,7 @@ class _ProfileScreenState extends State<ProfileScreen>
           'label': 'Pending',
           'color': Colors.orange,
           'icon': Icons.hourglass_top_rounded,
-          'desc': 'We are reviewing your verification request.',
+          'desc': 'Verification in progress. Check back soon.',
         };
       case 'blocked':
         return {
@@ -122,8 +122,8 @@ class _ProfileScreenState extends State<ProfileScreen>
 
   Route _smoothRoute(Widget page) {
     return PageRouteBuilder(
-      pageBuilder: (_, _, _) => page,
-      transitionsBuilder: (_, anim, _, child) {
+      pageBuilder: (_, __, ___) => page,
+      transitionsBuilder: (_, anim, __, child) {
         return FadeTransition(
           opacity: CurvedAnimation(parent: anim, curve: Curves.easeOut),
           child: SlideTransition(
@@ -173,7 +173,10 @@ class _ProfileScreenState extends State<ProfileScreen>
         actions: [
           IconButton(
             tooltip: 'Refresh',
-            onPressed: _loadVerification,
+            onPressed: () {
+              _loadProfile();
+              _loadVerification();
+            },
             icon: Icon(Icons.refresh_rounded, color: sub),
           ),
         ],
@@ -241,11 +244,13 @@ class _ProfileScreenState extends State<ProfileScreen>
                           fontWeight: FontWeight.w600,
                         ),
                       ),
-                      const SizedBox(height: 6),
-                      Text(
-                        _email.isNotEmpty ? _email : 'No email',
-                        style: TextStyle(color: sub, fontSize: 12),
-                      ),
+                      if (_dob.isNotEmpty) ...[
+                        const SizedBox(height: 4),
+                        Text(
+                          'Born: $_dob',
+                          style: TextStyle(color: sub, fontSize: 12),
+                        ),
+                      ],
                       const SizedBox(height: 16),
 
                       // Status chip row
@@ -263,17 +268,20 @@ class _ProfileScreenState extends State<ProfileScreen>
                         style: TextStyle(color: sub, height: 1.4),
                       ),
 
-                      // Verify CTA (top card, only if not approved)
+                      // Verify CTA (only if not approved)
                       if (!_isApproved) ...[
                         const SizedBox(height: 14),
                         SizedBox(
                           width: double.infinity,
                           height: 50,
                           child: ElevatedButton(
-                            onPressed: () => Navigator.push(
-                              context,
-                              _smoothRoute(const VerifyAccountScreen()),
-                            ),
+                            onPressed: () async {
+                              await Navigator.push(
+                                context,
+                                _smoothRoute(const VerifyAccountScreen()),
+                              );
+                              _loadVerification();
+                            },
                             style: ElevatedButton.styleFrom(
                               backgroundColor: Colors.teal.shade600,
                               foregroundColor: Colors.white,
@@ -298,7 +306,7 @@ class _ProfileScreenState extends State<ProfileScreen>
 
                 const SizedBox(height: 12),
 
-                // Stats glass row (Age/Email/Orders)
+                // Stats glass row (Age/DOB/Status)
                 _glassCard(
                   isDark: isDark,
                   child: Row(
@@ -306,9 +314,9 @@ class _ProfileScreenState extends State<ProfileScreen>
                     children: [
                       _infoItem('Age', _age > 0 ? '$_age' : '-', sub),
                       _divider(isDark),
-                      _infoItem('Email', _email.isNotEmpty ? '✓' : '—', sub),
+                      _infoItem('DOB', _dob.isNotEmpty ? '✓' : '—', sub),
                       _divider(isDark),
-                      _infoItem('Orders', '0', sub),
+                      _infoItem('Status', _isApproved ? '✓' : '✗', sub),
                     ],
                   ),
                 ),
@@ -540,7 +548,7 @@ class _ProfileScreenState extends State<ProfileScreen>
       barrierLabel: 'Support',
       barrierColor: Colors.black.withOpacity(isDark ? 0.6 : 0.4),
       transitionDuration: const Duration(milliseconds: 250),
-      pageBuilder: (_, _, _) => Center(
+      pageBuilder: (_, __, ___) => Center(
         child: Material(
           color: Colors.transparent,
           child: _glassDialog(
@@ -611,7 +619,7 @@ class _ProfileScreenState extends State<ProfileScreen>
           ),
         ),
       ),
-      transitionBuilder: (_, anim, _, child) => FadeTransition(
+      transitionBuilder: (_, anim, __, child) => FadeTransition(
         opacity: CurvedAnimation(parent: anim, curve: Curves.easeOut),
         child: child,
       ),

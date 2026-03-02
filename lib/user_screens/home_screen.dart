@@ -1,6 +1,5 @@
 import 'dart:ui';
 import 'package:flutter/material.dart';
-import 'dart:math' as math;
 
 import '../services/preferences_service.dart';
 import '../services/draft_order_service.dart';

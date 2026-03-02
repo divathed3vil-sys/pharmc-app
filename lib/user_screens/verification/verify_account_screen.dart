@@ -1,6 +1,10 @@
+import 'dart:async';
 import 'dart:ui';
 import 'package:flutter/material.dart';
-import '../../main.dart';
+import 'package:flutter/services.dart';
+import '../../services/verification_service.dart';
+import '../../services/preferences_service.dart';
+import '../main_navigation.dart';
 
 class VerifyAccountScreen extends StatefulWidget {
   const VerifyAccountScreen({super.key});
@@ -11,20 +15,43 @@ class VerifyAccountScreen extends StatefulWidget {
 
 class _VerifyAccountScreenState extends State<VerifyAccountScreen>
     with SingleTickerProviderStateMixin {
-  final _whatsappController = TextEditingController();
+  // ---- State ----
   bool _loading = false;
   String? _error;
+  VerificationState? _verState;
+
+  // Code input controllers (6 digits)
+  final List<TextEditingController> _codeControllers = List.generate(
+    6,
+    (_) => TextEditingController(),
+  );
+  final List<FocusNode> _codeFocusNodes = List.generate(6, (_) => FocusNode());
+
+  // Lock countdown
+  Timer? _lockTimer;
+  int _lockSecondsRemaining = 0;
+
+  // Polling for admin code_sent toggle
+  Timer? _pollTimer;
 
   late final AnimationController _anim;
   late final Animation<double> _fade;
   late final Animation<Offset> _slide;
 
-  bool get _validPhone {
-    final p = _whatsappController.text.trim();
-    return p.length == 9 && RegExp(r'^\d{9}$').hasMatch(p);
-  }
+  // ---- Computed ----
+  String get _enteredCode => _codeControllers.map((c) => c.text).join();
 
-  bool get _canSubmit => !_loading && _validPhone;
+  bool get _codeComplete => _enteredCode.length == 6;
+
+  bool get _canSubmitCode => _codeComplete && !_loading && !_isLocked;
+
+  bool get _isLocked => _lockSecondsRemaining > 0;
+
+  bool get _hasRequestedCode =>
+      _verState != null &&
+      (_verState!.status == 'pending' || _verState!.status == 'approved');
+
+  bool get _codeSentByAdmin => _verState?.codeSent == true;
 
   @override
   void initState() {
@@ -40,61 +67,159 @@ class _VerifyAccountScreenState extends State<VerifyAccountScreen>
     ).animate(CurvedAnimation(parent: _anim, curve: Curves.easeOutCubic));
     _anim.forward();
 
-    _whatsappController.addListener(() => setState(() => _error = null));
+    _loadState();
   }
 
   @override
   void dispose() {
     _anim.dispose();
-    _whatsappController.dispose();
+    _lockTimer?.cancel();
+    _pollTimer?.cancel();
+    for (final c in _codeControllers) {
+      c.dispose();
+    }
+    for (final f in _codeFocusNodes) {
+      f.dispose();
+    }
     super.dispose();
   }
 
-  Future<void> _submit() async {
+  // ---- Load verification state from server ----
+  Future<void> _loadState() async {
+    setState(() => _loading = true);
+    try {
+      final state = await VerificationService.getVerificationState();
+      if (!mounted) return;
+      setState(() {
+        _verState = state;
+        _loading = false;
+        _error = null;
+      });
+
+      // Start lock countdown if locked
+      if (state.isLocked && state.lockRemainingSeconds > 0) {
+        _startLockCountdown(state.lockRemainingSeconds);
+      }
+
+      // Start polling if waiting for admin to send code
+      if (state.status == 'pending' && !state.codeSent) {
+        _startPolling();
+      }
+    } catch (e) {
+      if (!mounted) return;
+      setState(() {
+        _loading = false;
+        _error = 'Failed to load verification status.';
+      });
+    }
+  }
+
+  // ---- Request verification (Step 1) ----
+  Future<void> _requestVerification() async {
     setState(() {
       _loading = true;
       _error = null;
     });
 
-    try {
-      final user = supabase.auth.currentUser;
-      if (user == null) {
-        setState(() => _error = 'Please login again.');
-        return;
-      }
+    final result = await VerificationService.requestVerification();
 
-      final whatsapp = '+94${_whatsappController.text.trim()}';
+    if (!mounted) return;
+    setState(() => _loading = false);
 
-      // Insert verification request
-      await supabase.from('verification_requests').insert({
-        'user_id': user.id,
-        'whatsapp_phone': whatsapp,
-        'status': 'pending',
-      });
+    if (result.success) {
+      // Reload state to show "waiting for admin" UI
+      await _loadState();
+    } else {
+      setState(() => _error = result.message);
+    }
+  }
 
-      // Mark profile as pending (so UI can show "Pending")
-      await supabase
-          .from('profiles')
-          .update({'verification_status': 'pending'})
-          .eq('id', user.id);
+  // ---- Submit verification code (Step 3) ----
+  Future<void> _submitCode() async {
+    if (!_canSubmitCode) return;
 
-      if (!mounted) return;
+    setState(() {
+      _loading = true;
+      _error = null;
+    });
 
+    final result = await VerificationService.submitVerificationCode(
+      enteredCode: _enteredCode,
+    );
+
+    if (!mounted) return;
+    setState(() => _loading = false);
+
+    if (result.success) {
+      // Navigate to success screen
+      _pollTimer?.cancel();
+      _lockTimer?.cancel();
       Navigator.pushReplacement(
         context,
-        _smoothRoute(const VerificationPendingScreen()),
+        _smoothRoute(const _VerificationSuccessScreen()),
       );
-    } catch (e) {
-      setState(() => _error = 'Failed to submit. Please try again.');
-    } finally {
-      if (mounted) setState(() => _loading = false);
+    } else if (result.codePending) {
+      setState(() => _error = result.message);
+    } else if (result.isLocked) {
+      _startLockCountdown(result.lockRemainingMinutes * 60);
+      setState(() => _error = result.message);
+      _clearCodeFields();
+    } else {
+      setState(() => _error = result.message);
+      _clearCodeFields();
+    }
+  }
+
+  // ---- Lock countdown ----
+  void _startLockCountdown(int seconds) {
+    _lockTimer?.cancel();
+    setState(() => _lockSecondsRemaining = seconds);
+    _lockTimer = Timer.periodic(const Duration(seconds: 1), (timer) {
+      if (!mounted) {
+        timer.cancel();
+        return;
+      }
+      setState(() {
+        _lockSecondsRemaining--;
+        if (_lockSecondsRemaining <= 0) {
+          _lockSecondsRemaining = 0;
+          timer.cancel();
+          _loadState(); // Refresh state after unlock
+        }
+      });
+    });
+  }
+
+  // ---- Polling for admin code_sent ----
+  void _startPolling() {
+    _pollTimer?.cancel();
+    _pollTimer = Timer.periodic(const Duration(seconds: 10), (_) async {
+      if (!mounted) return;
+      try {
+        final state = await VerificationService.getVerificationState();
+        if (!mounted) return;
+        setState(() => _verState = state);
+        if (state.codeSent) {
+          _pollTimer?.cancel();
+        }
+      } catch (_) {}
+    });
+  }
+
+  // ---- Clear code fields ----
+  void _clearCodeFields() {
+    for (final c in _codeControllers) {
+      c.clear();
+    }
+    if (_codeFocusNodes.isNotEmpty) {
+      _codeFocusNodes[0].requestFocus();
     }
   }
 
   Route _smoothRoute(Widget page) {
     return PageRouteBuilder(
-      pageBuilder: (_, _, _) => page,
-      transitionsBuilder: (_, anim, _, child) {
+      pageBuilder: (_, __, ___) => page,
+      transitionsBuilder: (_, anim, __, child) {
         return FadeTransition(
           opacity: CurvedAnimation(parent: anim, curve: Curves.easeOut),
           child: SlideTransition(
@@ -140,98 +265,164 @@ class _VerifyAccountScreenState extends State<VerifyAccountScreen>
         child: SlideTransition(
           position: _slide,
           child: SafeArea(
-            child: Padding(
+            child: SingleChildScrollView(
+              physics: const BouncingScrollPhysics(),
               padding: const EdgeInsets.all(16),
-              child: _glassCard(
-                isDark: isDark,
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      'Unlock ordering',
-                      style: TextStyle(
-                        color: text,
-                        fontWeight: FontWeight.w900,
-                        fontSize: 18,
-                      ),
-                    ),
-                    const SizedBox(height: 6),
-                    Text(
-                      'Verification helps us prevent fake orders and protect pharmacies.',
-                      style: TextStyle(color: sub, height: 1.4),
-                    ),
-                    const SizedBox(height: 18),
-
-                    _sectionTitle('1) WhatsApp number', text, sub),
-                    const SizedBox(height: 8),
-                    _phoneField(isDark, text, sub),
-
-                    const SizedBox(height: 14),
-                    _comingSoonNicCard(isDark, text, sub),
-
-                    if (_error != null) ...[
-                      const SizedBox(height: 14),
-                      Container(
-                        width: double.infinity,
-                        padding: const EdgeInsets.all(12),
-                        decoration: BoxDecoration(
-                          color: Colors.red.withOpacity(isDark ? 0.18 : 0.10),
-                          borderRadius: BorderRadius.circular(14),
-                          border: Border.all(
-                            color: Colors.red.withOpacity(0.25),
-                          ),
-                        ),
-                        child: Text(
-                          _error!,
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  // ---- Main Card ----
+                  _glassCard(
+                    isDark: isDark,
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          'Unlock ordering',
                           style: TextStyle(
-                            color: isDark
-                                ? Colors.red.shade200
-                                : Colors.red.shade700,
-                            fontWeight: FontWeight.w700,
-                            fontSize: 13,
+                            color: text,
+                            fontWeight: FontWeight.w900,
+                            fontSize: 18,
                           ),
                         ),
-                      ),
-                    ],
-
-                    const Spacer(),
-
-                    SizedBox(
-                      width: double.infinity,
-                      height: 52,
-                      child: ElevatedButton(
-                        onPressed: _canSubmit ? _submit : null,
-                        style: ElevatedButton.styleFrom(
-                          backgroundColor: Colors.teal.shade600,
-                          disabledBackgroundColor: isDark
-                              ? Colors.white.withOpacity(0.10)
-                              : Colors.grey.shade200,
-                          foregroundColor: Colors.white,
-                          elevation: 0,
-                          shape: RoundedRectangleBorder(
-                            borderRadius: BorderRadius.circular(16),
-                          ),
+                        const SizedBox(height: 6),
+                        Text(
+                          'Verification helps us prevent fake orders and protect pharmacies.',
+                          style: TextStyle(color: sub, height: 1.4),
                         ),
-                        child: _loading
-                            ? const SizedBox(
-                                width: 22,
-                                height: 22,
-                                child: CircularProgressIndicator(
-                                  strokeWidth: 2.2,
-                                  color: Colors.white,
-                                ),
-                              )
-                            : const Text(
-                                'Request verification',
-                                style: TextStyle(
-                                  fontWeight: FontWeight.w900,
-                                  fontSize: 15,
+                        const SizedBox(height: 20),
+
+                        // ---- STEP 1: Request Verification ----
+                        if (!_hasRequestedCode) ...[
+                          _sectionTitle(
+                            '1) Request verification code',
+                            text,
+                            sub,
+                          ),
+                          const SizedBox(height: 8),
+                          Text(
+                            'Tap the button below to request a verification code. '
+                            'An admin will send you a 6-digit code.',
+                            style: TextStyle(
+                              color: sub,
+                              fontSize: 13,
+                              height: 1.4,
+                            ),
+                          ),
+                          const SizedBox(height: 14),
+                          SizedBox(
+                            width: double.infinity,
+                            height: 52,
+                            child: ElevatedButton(
+                              onPressed: _loading ? null : _requestVerification,
+                              style: ElevatedButton.styleFrom(
+                                backgroundColor: Colors.teal.shade600,
+                                disabledBackgroundColor: isDark
+                                    ? Colors.white.withOpacity(0.10)
+                                    : Colors.grey.shade200,
+                                foregroundColor: Colors.white,
+                                elevation: 0,
+                                shape: RoundedRectangleBorder(
+                                  borderRadius: BorderRadius.circular(16),
                                 ),
                               ),
-                      ),
+                              child: _loading
+                                  ? const SizedBox(
+                                      width: 22,
+                                      height: 22,
+                                      child: CircularProgressIndicator(
+                                        strokeWidth: 2.2,
+                                        color: Colors.white,
+                                      ),
+                                    )
+                                  : const Text(
+                                      'Request verification',
+                                      style: TextStyle(
+                                        fontWeight: FontWeight.w900,
+                                        fontSize: 15,
+                                      ),
+                                    ),
+                            ),
+                          ),
+                        ],
+
+                        // ---- STEP 2: Waiting for admin ----
+                        if (_hasRequestedCode && !_codeSentByAdmin) ...[
+                          _sectionTitle('Waiting for admin', text, sub),
+                          const SizedBox(height: 12),
+                          _waitingForAdminCard(isDark, text, sub),
+                        ],
+
+                        // ---- STEP 3: Enter code ----
+                        if (_hasRequestedCode && _codeSentByAdmin) ...[
+                          _sectionTitle('Enter verification code', text, sub),
+                          const SizedBox(height: 12),
+
+                          // Lock countdown
+                          if (_isLocked) ...[
+                            _lockCountdownCard(isDark),
+                            const SizedBox(height: 12),
+                          ],
+
+                          // 6-digit code input
+                          _codeInputRow(isDark, text, sub),
+                          const SizedBox(height: 6),
+
+                          // Attempts remaining
+                          if (_verState != null && !_isLocked)
+                            Padding(
+                              padding: const EdgeInsets.only(top: 6),
+                              child: _attemptsIndicator(isDark),
+                            ),
+
+                          const SizedBox(height: 16),
+
+                          // Submit button
+                          SizedBox(
+                            width: double.infinity,
+                            height: 52,
+                            child: ElevatedButton(
+                              onPressed: _canSubmitCode ? _submitCode : null,
+                              style: ElevatedButton.styleFrom(
+                                backgroundColor: Colors.teal.shade600,
+                                disabledBackgroundColor: isDark
+                                    ? Colors.white.withOpacity(0.10)
+                                    : Colors.grey.shade200,
+                                foregroundColor: Colors.white,
+                                elevation: 0,
+                                shape: RoundedRectangleBorder(
+                                  borderRadius: BorderRadius.circular(16),
+                                ),
+                              ),
+                              child: _loading
+                                  ? const SizedBox(
+                                      width: 22,
+                                      height: 22,
+                                      child: CircularProgressIndicator(
+                                        strokeWidth: 2.2,
+                                        color: Colors.white,
+                                      ),
+                                    )
+                                  : const Text(
+                                      'Verify',
+                                      style: TextStyle(
+                                        fontWeight: FontWeight.w900,
+                                        fontSize: 15,
+                                      ),
+                                    ),
+                            ),
+                          ),
+                        ],
+
+                        // ---- Error ----
+                        if (_error != null) ...[
+                          const SizedBox(height: 14),
+                          _errorCard(isDark, _error!),
+                        ],
+                      ],
                     ),
-                  ],
-                ),
+                  ),
+                ],
               ),
             ),
           ),
@@ -239,6 +430,8 @@ class _VerifyAccountScreenState extends State<VerifyAccountScreen>
       ),
     );
   }
+
+  // ============ WIDGETS ============
 
   Widget _sectionTitle(String t, Color text, Color sub) {
     return Row(
@@ -252,7 +445,7 @@ class _VerifyAccountScreenState extends State<VerifyAccountScreen>
           ),
           child: Center(
             child: Icon(
-              Icons.checklist_rounded,
+              Icons.verified_rounded,
               size: 14,
               color: Colors.teal.shade400,
             ),
@@ -273,113 +466,234 @@ class _VerifyAccountScreenState extends State<VerifyAccountScreen>
     );
   }
 
-  Widget _phoneField(bool isDark, Color text, Color sub) {
+  Widget _waitingForAdminCard(bool isDark, Color text, Color sub) {
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        color: Colors.orange.withOpacity(isDark ? 0.12 : 0.08),
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(color: Colors.orange.withOpacity(0.22)),
+      ),
+      child: Column(
+        children: [
+          Icon(
+            Icons.hourglass_top_rounded,
+            color: Colors.orange.shade500,
+            size: 36,
+          ),
+          const SizedBox(height: 10),
+          Text(
+            'Code not sent yet',
+            style: TextStyle(
+              color: Colors.orange.shade600,
+              fontWeight: FontWeight.w900,
+              fontSize: 15,
+            ),
+          ),
+          const SizedBox(height: 6),
+          Text(
+            'An admin will review your request and send you a 6-digit code. '
+            'This page auto-refreshes every 10 seconds.',
+            textAlign: TextAlign.center,
+            style: TextStyle(
+              color: isDark ? Colors.orange.shade200 : Colors.orange.shade800,
+              fontSize: 12,
+              height: 1.5,
+            ),
+          ),
+          const SizedBox(height: 12),
+          SizedBox(
+            width: 20,
+            height: 20,
+            child: CircularProgressIndicator(
+              strokeWidth: 2,
+              color: Colors.orange.shade400,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _codeInputRow(bool isDark, Color text, Color sub) {
     final inputBg = isDark
         ? Colors.white.withOpacity(0.06)
         : Colors.black.withOpacity(0.03);
+    final borderColor = isDark
+        ? Colors.white.withOpacity(0.10)
+        : Colors.black.withOpacity(0.06);
 
     return Row(
-      children: [
-        Container(
+      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+      children: List.generate(6, (index) {
+        return SizedBox(
+          width: 48,
           height: 56,
-          padding: const EdgeInsets.symmetric(horizontal: 14),
-          decoration: BoxDecoration(
-            color: inputBg,
-            borderRadius: const BorderRadius.only(
-              topLeft: Radius.circular(16),
-              bottomLeft: Radius.circular(16),
-            ),
-            border: Border.all(
-              color: isDark
-                  ? Colors.white.withOpacity(0.10)
-                  : Colors.black.withOpacity(0.06),
-            ),
-          ),
-          child: Center(
-            child: Text(
-              '+94',
-              style: TextStyle(color: text, fontWeight: FontWeight.w900),
-            ),
-          ),
-        ),
-        Expanded(
           child: Container(
-            height: 56,
             decoration: BoxDecoration(
               color: inputBg,
-              borderRadius: const BorderRadius.only(
-                topRight: Radius.circular(16),
-                bottomRight: Radius.circular(16),
-              ),
+              borderRadius: BorderRadius.circular(14),
               border: Border.all(
-                color: isDark
-                    ? Colors.white.withOpacity(0.10)
-                    : Colors.black.withOpacity(0.06),
+                color: _codeFocusNodes[index].hasFocus
+                    ? Colors.teal.shade400
+                    : borderColor,
+                width: _codeFocusNodes[index].hasFocus ? 2 : 1,
               ),
             ),
             child: TextField(
-              controller: _whatsappController,
-              maxLength: 9,
-              keyboardType: TextInputType.phone,
-              style: TextStyle(color: text, fontWeight: FontWeight.w700),
-              decoration: InputDecoration(
+              controller: _codeControllers[index],
+              focusNode: _codeFocusNodes[index],
+              enabled: !_isLocked && !_loading,
+              maxLength: 1,
+              textAlign: TextAlign.center,
+              keyboardType: TextInputType.number,
+              inputFormatters: [FilteringTextInputFormatter.digitsOnly],
+              style: TextStyle(
+                color: text,
+                fontWeight: FontWeight.w900,
+                fontSize: 22,
+              ),
+              decoration: const InputDecoration(
                 counterText: '',
-                hintText: '771234567',
-                hintStyle: TextStyle(color: sub),
                 border: InputBorder.none,
-                contentPadding: const EdgeInsets.symmetric(
-                  horizontal: 14,
-                  vertical: 16,
-                ),
+                contentPadding: EdgeInsets.zero,
+              ),
+              onChanged: (value) {
+                if (value.isNotEmpty && index < 5) {
+                  _codeFocusNodes[index + 1].requestFocus();
+                } else if (value.isEmpty && index > 0) {
+                  _codeFocusNodes[index - 1].requestFocus();
+                }
+                setState(() {});
+              },
+            ),
+          ),
+        );
+      }),
+    );
+  }
+
+  Widget _attemptsIndicator(bool isDark) {
+    final attempts = _verState?.attempts ?? 0;
+    final remaining = (5 - attempts).clamp(0, 5);
+
+    return Row(
+      mainAxisAlignment: MainAxisAlignment.center,
+      children: [
+        ...List.generate(5, (i) {
+          final used = i < attempts;
+          return Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 3),
+            child: Container(
+              width: 8,
+              height: 8,
+              decoration: BoxDecoration(
+                shape: BoxShape.circle,
+                color: used
+                    ? Colors.red.shade400
+                    : Colors.teal.shade400.withOpacity(0.3),
               ),
             ),
+          );
+        }),
+        const SizedBox(width: 8),
+        Text(
+          '$remaining/5 attempts left',
+          style: TextStyle(
+            color: remaining <= 2
+                ? Colors.red.shade400
+                : (isDark ? Colors.grey.shade500 : Colors.grey.shade600),
+            fontWeight: FontWeight.w700,
+            fontSize: 11,
           ),
         ),
       ],
     );
   }
 
-  Widget _comingSoonNicCard(bool isDark, Color text, Color sub) {
+  Widget _lockCountdownCard(bool isDark) {
+    final minutes = _lockSecondsRemaining ~/ 60;
+    final seconds = _lockSecondsRemaining % 60;
+    final timeStr =
+        '${minutes.toString().padLeft(2, '0')}:${seconds.toString().padLeft(2, '0')}';
+
     return Container(
-      padding: const EdgeInsets.all(14),
+      width: double.infinity,
+      padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
-        color: isDark
-            ? Colors.white.withOpacity(0.05)
-            : Colors.black.withOpacity(0.03),
+        color: Colors.red.withOpacity(isDark ? 0.15 : 0.08),
         borderRadius: BorderRadius.circular(16),
-        border: Border.all(
-          color: isDark
-              ? Colors.white.withOpacity(0.08)
-              : Colors.black.withOpacity(0.06),
-        ),
+        border: Border.all(color: Colors.red.withOpacity(0.25)),
+      ),
+      child: Column(
+        children: [
+          Icon(Icons.lock_clock_rounded, color: Colors.red.shade400, size: 32),
+          const SizedBox(height: 8),
+          Text(
+            'Account locked',
+            style: TextStyle(
+              color: Colors.red.shade400,
+              fontWeight: FontWeight.w900,
+              fontSize: 15,
+            ),
+          ),
+          const SizedBox(height: 4),
+          Text(
+            'Too many incorrect attempts.',
+            style: TextStyle(
+              color: isDark ? Colors.red.shade200 : Colors.red.shade700,
+              fontSize: 12,
+            ),
+          ),
+          const SizedBox(height: 10),
+          Text(
+            timeStr,
+            style: TextStyle(
+              color: Colors.red.shade400,
+              fontWeight: FontWeight.w900,
+              fontSize: 28,
+              fontFamily: 'monospace',
+            ),
+          ),
+          const SizedBox(height: 4),
+          Text(
+            'until unlock',
+            style: TextStyle(
+              color: isDark ? Colors.red.shade300 : Colors.red.shade600,
+              fontSize: 11,
+              fontWeight: FontWeight.w700,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _errorCard(bool isDark, String msg) {
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.all(12),
+      decoration: BoxDecoration(
+        color: Colors.red.withOpacity(isDark ? 0.18 : 0.10),
+        borderRadius: BorderRadius.circular(14),
+        border: Border.all(color: Colors.red.withOpacity(0.25)),
       ),
       child: Row(
         children: [
-          Icon(Icons.lock_rounded, color: sub),
+          Icon(
+            Icons.error_outline_rounded,
+            color: Colors.red.shade300,
+            size: 18,
+          ),
           const SizedBox(width: 10),
           Expanded(
             child: Text(
-              'NIC verification (Coming soon)',
+              msg,
               style: TextStyle(
-                color: text,
-                fontWeight: FontWeight.w800,
+                color: isDark ? Colors.red.shade200 : Colors.red.shade700,
+                fontWeight: FontWeight.w700,
                 fontSize: 13,
-              ),
-            ),
-          ),
-          Container(
-            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
-            decoration: BoxDecoration(
-              color: Colors.orange.withOpacity(0.12),
-              borderRadius: BorderRadius.circular(99),
-              border: Border.all(color: Colors.orange.withOpacity(0.2)),
-            ),
-            child: Text(
-              'Soon',
-              style: TextStyle(
-                color: Colors.orange.shade600,
-                fontWeight: FontWeight.w900,
-                fontSize: 12,
               ),
             ),
           ),
@@ -395,7 +709,6 @@ class _VerifyAccountScreenState extends State<VerifyAccountScreen>
         filter: ImageFilter.blur(sigmaX: 18, sigmaY: 18),
         child: Container(
           width: double.infinity,
-          height: double.infinity,
           padding: const EdgeInsets.all(18),
           decoration: BoxDecoration(
             color: isDark
@@ -415,9 +728,149 @@ class _VerifyAccountScreenState extends State<VerifyAccountScreen>
   }
 }
 
-// ------------------------------------------------------------
-// Pending screen
-// ------------------------------------------------------------
+// ============================================================
+// Success Screen — shown after successful verification
+// ============================================================
+class _VerificationSuccessScreen extends StatefulWidget {
+  const _VerificationSuccessScreen();
+
+  @override
+  State<_VerificationSuccessScreen> createState() =>
+      _VerificationSuccessScreenState();
+}
+
+class _VerificationSuccessScreenState extends State<_VerificationSuccessScreen>
+    with SingleTickerProviderStateMixin {
+  late final AnimationController _anim;
+  late final Animation<double> _scale;
+  late final Animation<double> _fade;
+
+  @override
+  void initState() {
+    super.initState();
+    _anim = AnimationController(
+      vsync: this,
+      duration: const Duration(milliseconds: 800),
+    );
+    _scale = Tween<double>(
+      begin: 0.3,
+      end: 1.0,
+    ).animate(CurvedAnimation(parent: _anim, curve: Curves.elasticOut));
+    _fade = Tween<double>(
+      begin: 0.0,
+      end: 1.0,
+    ).animate(CurvedAnimation(parent: _anim, curve: Curves.easeOut));
+
+    _anim.forward();
+
+    // Auto-redirect to home after 3 seconds
+    Future.delayed(const Duration(seconds: 3), () {
+      if (!mounted) return;
+      Navigator.pushAndRemoveUntil(
+        context,
+        PageRouteBuilder(
+          pageBuilder: (_, __, ___) => const MainNavigation(),
+          transitionDuration: const Duration(milliseconds: 500),
+          transitionsBuilder: (_, animation, __, child) =>
+              FadeTransition(opacity: animation, child: child),
+        ),
+        (route) => false,
+      );
+    });
+  }
+
+  @override
+  void dispose() {
+    _anim.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    final bg = isDark ? const Color(0xFF0F0F0F) : const Color(0xFFFAFAFA);
+    final text = isDark ? Colors.white : const Color(0xFF1A1A1A);
+    final sub = isDark ? Colors.grey.shade500 : Colors.grey.shade600;
+
+    return Scaffold(
+      backgroundColor: bg,
+      body: SafeArea(
+        child: Center(
+          child: FadeTransition(
+            opacity: _fade,
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                ScaleTransition(
+                  scale: _scale,
+                  child: Container(
+                    width: 100,
+                    height: 100,
+                    decoration: BoxDecoration(
+                      gradient: LinearGradient(
+                        colors: [Colors.green.shade400, Colors.green.shade700],
+                      ),
+                      shape: BoxShape.circle,
+                      boxShadow: [
+                        BoxShadow(
+                          color: Colors.green.withOpacity(0.3),
+                          blurRadius: 24,
+                          spreadRadius: -4,
+                        ),
+                      ],
+                    ),
+                    child: const Icon(
+                      Icons.check_rounded,
+                      color: Colors.white,
+                      size: 52,
+                    ),
+                  ),
+                ),
+                const SizedBox(height: 20),
+                Text(
+                  'Verified!',
+                  style: TextStyle(
+                    color: text,
+                    fontWeight: FontWeight.w900,
+                    fontSize: 26,
+                  ),
+                ),
+                const SizedBox(height: 8),
+                Text(
+                  'Your account has been verified.\nYou can now place real orders.',
+                  textAlign: TextAlign.center,
+                  style: TextStyle(color: sub, height: 1.5),
+                ),
+                const SizedBox(height: 20),
+                SizedBox(
+                  width: 16,
+                  height: 16,
+                  child: CircularProgressIndicator(
+                    strokeWidth: 2,
+                    color: Colors.teal.shade400,
+                  ),
+                ),
+                const SizedBox(height: 8),
+                Text(
+                  'Redirecting to home...',
+                  style: TextStyle(
+                    color: sub,
+                    fontSize: 12,
+                    fontWeight: FontWeight.w600,
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+// ============================================================
+// Pending Screen (kept for backward compatibility)
+// ============================================================
 class VerificationPendingScreen extends StatelessWidget {
   const VerificationPendingScreen({super.key});
 
@@ -479,7 +932,8 @@ class VerificationPendingScreen extends StatelessWidget {
                     ),
                     const SizedBox(height: 8),
                     Text(
-                      'We will verify your account within 2–3 working days.\nUntil then, you can prepare demo orders.',
+                      'We will send you a verification code soon.\n'
+                      'Until then, you can prepare demo orders.',
                       textAlign: TextAlign.center,
                       style: TextStyle(color: sub, height: 1.45),
                     ),
